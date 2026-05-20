@@ -4,6 +4,10 @@ The forwarding bridge server (subsequently referred to as 'server') is designed 
 
 The server itself is simply a Python script that can be run on any 'always on' Windows/Linux/Mac/Raspberry Pi computer.  The server is provided as a 3.7x Python source script, a Windows executable program file, or a Raspberry Pi OS executable program file (32 bit and 64 bit).  It can read an optional configuration file created by the user (see below).
 
+#### 5/20/26 Update
+
+An analogous app is now available that can run on **Andriod** devices, which may offer a simpler path then maintaining another always-on computer.  Please see [this page](https://aeb.dothesmartthings.com/) for more information.
+
 #### 10/19/23 Updates
 * HTTP **PUT** support for internet forwarding
   ```
