@@ -1,21 +1,22 @@
-# edgebridge-aeb -- simple host-port deployment (works on Synology Container Manager & Raspberry Pi).
+# edgebridge-aeb -- default deployment (HOST networking).
 #
-# The SmartThings hub reaches the bridge at  http://<host-ip>:8088 .
-# Pull the published image instead of building:  image: woobooung/edgebridge-aeb:latest
+# Host networking is the DEFAULT so that real LAN client IPs are seen and
+# mDNS auto-discovery, device->hub forwarding, and MQTT forward all work.
+# There is NO port mapping in host mode: the bridge listens directly on the
+# host's Server_Port (default 8088). Reach it at  http://<host-ip>:8088 .
+# If 8088 is taken on the host, change it with EB_SERVER_PORT below.
 #
-# If your hub cannot reach the host's mapped port (some segmented networks), use a macvlan
-# network so the bridge gets its own LAN IP -- see docker/docker-compose.yml for that example.
+# Need isolated port-mapping instead (bridge network)? Use docker-compose.bridge.yml.
 
 services:
   edgebridge:
     image: woobooung/edgebridge-aeb:latest
-    # To build locally instead of pulling, comment out `image:` above and uncomment:
-    # build: .
     container_name: edgebridge-aeb
-    ports:
-      - "8088:8088"
+    network_mode: host
+    # environment:
+    #   - EB_ST_TOKEN=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx   # optional SmartThings PAT
+    #   - EB_SERVER_PORT=8088                                # change if 8088 is taken
     volumes:
       - ./data:/data
-      # Optionally externalize the config file:
-      # - ./edgebridge.cfg:/usr/src/app/edgebridge.cfg
+      # - ./edgebridge.cfg:/usr/src/app/edgebridge.cfg       # optional config file
     restart: unless-stopped
