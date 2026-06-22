@@ -27,7 +27,7 @@
 #     6. forward fixes    : PUT/DELETE/PATCH support + Korean/multi-byte truncation fix
 #                           (Content-Length is now the UTF-8 *byte* length, body is raw bytes)
 #
-# MQTT reference implementation kindly provided by "Sansai-nim" of the dothesmartthings cafe.
+# MQTT reference implementation kindly provided by "Sansanai" of the dothesmartthings cafe.
 #
 # Reads 'edgebridge.cfg' for configuration (server port/ip, SmartThings token, data dir).
 # Persists '.registrations', 'redirects.jsonl', 'callbacks.jsonl' under the data directory.
@@ -212,7 +212,7 @@ def now_ms():
 
 # =============================================================================
 #  AEB MQTT BRIDGE  (spec: mqtt-bridge-spec-v0.3.md)
-#  Reference implementation provided by Sansai-nim (dothesmartthings cafe).
+#  Reference implementation provided by Sansanai (dothesmartthings cafe).
 # =============================================================================
 
 def _mqtt_cert_dir():
