@@ -89,6 +89,50 @@ Pi 3 / 4 / 5 / Zero 2 W (64-bit OS) 에서 위 `docker run` 명령이 그대로 
 
 ---
 
+## 🐍 Docker 없이 직접 실행 (venv) — 시놀로지/리눅스
+
+> Docker 를 쓰지 않고 Python 으로 바로 돌리는 방법입니다. (가이드 제공: **두더싱 카페 산사나이99(산사이)님**)
+> 전제: 시놀로지 패키지 센터 등에서 **Python 3** 가 설치되어 있어야 합니다 (산사이님 가이드는 3.14 기준, 3.8+ 면 동작).
+
+```sh
+# 1) 스크립트가 있는 폴더로 이동 (경로는 본인 환경에 맞게)
+cd /volume1/homes/aeb/aeb-bridge
+
+# 2) 가상환경 생성 + 활성화 (프롬프트 앞에 (venv) 가 보이면 성공)
+python3 -m venv venv
+source venv/bin/activate
+
+# 3) 필수 패키지 설치
+pip install paho-mqtt requests cryptography
+#   (또는)  pip install -r requirements.txt
+```
+
+`pip` 자체가 없다면:
+```sh
+wget https://bootstrap.pypa.io/get-pip.py
+python3 get-pip.py
+```
+
+### 실행 / 종료 / 상태
+```sh
+# 실행 (로그 안 남김)
+nohup python3 edgebridge.py > /dev/null 2>&1 &
+# 실행 (로그 남김)
+nohup python3 edgebridge.py > edgebridge.log 2>&1 &
+
+# 종료
+pkill -f edgebridge.py
+
+# 상태 확인
+ps -ef | grep edgebridge.py
+```
+
+> 데이터 파일(`.registrations`, `redirects.jsonl`, `callbacks.jsonl`, `mqtt_certs/`)은 기본적으로
+> 실행 폴더(또는 `edgebridge.cfg` 의 `Data_Dir` / 환경변수 `EB_DATA_DIR`)에 저장됩니다.
+> 부팅 시 자동 실행이 필요하면 원작 README 의 systemd 가이드를 참고하세요.
+
+---
+
 ## 📡 새로 추가된 API
 
 기준 주소는 `http://<bridge-ip>:8088` 입니다. (아래 예시는 `192.168.1.88`)
