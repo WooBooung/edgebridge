@@ -74,18 +74,97 @@ docker run -d --name edgebridge-aeb \
 docker compose up -d
 ```
 
-### 라즈베리파이 (Raspberry Pi OS 64-bit)
-Pi 3 / 4 / 5 / Zero 2 W (64-bit OS) 에서 위 `docker run` 명령이 그대로 동작합니다 (`linux/arm64`).
-> 32비트(armv7) Pi 는 공식 이미지에 포함되지 않습니다. 그 경우 `Dockerfile` 로 로컬 빌드하세요
-> (cryptography 컴파일을 위해 `apt-get install build-essential libffi-dev cargo` 필요).
+> 컨테이너는 데이터(`/data`)에 `.registrations`, `redirects.jsonl`, `callbacks.jsonl`, `mqtt_certs/` 를 영속 저장합니다.
+> 설정 파일을 외부화하려면 호스트의 `edgebridge.cfg` 를 `/usr/src/app/edgebridge.cfg` 로 마운트하세요.
 
-### 시놀로지 NAS (Synology Container Manager)
-1. **Container Manager → 레지스트리** 에서 `woobooung/edgebridge-aeb` 검색 후 다운로드 (Intel/AMD = amd64, ARM 모델 = arm64 자동 선택).
-2. **컨테이너 → 생성** → 포트 `8088:8088` 매핑, 볼륨 `/data` 를 NAS 폴더에 연결, 재시작 정책 설정.
-   - 또는 **프로젝트** 기능으로 저장소의 `docker-compose.yml` 을 그대로 가져오기.
+---
 
-설정 파일을 외부화하려면 호스트의 `edgebridge.cfg` 를 `/usr/src/app/edgebridge.cfg` 로 마운트하세요.
-컨테이너는 데이터(`/data`)에 `.registrations`, `redirects.jsonl`, `callbacks.jsonl`, `mqtt_certs/` 를 영속 저장합니다.
+## 🟦 시놀로지 NAS 설치 (자세히)
+
+> 대부분의 시놀로지(Intel/AMD = amd64, 최신 ARM 모델 = arm64)에서 동작합니다. 멀티아치라 CPU에 맞는 이미지가 자동 선택됩니다.
+
+### 방법 A — Container Manager GUI (권장)
+1. **DSM → Container Manager → 레지스트리** 탭에서 `woobooung/edgebridge-aeb` 검색 → **다운로드** → 태그 `latest` 선택.
+2. (선택) **File Station** 에서 데이터 폴더를 미리 생성: 예) `/docker/edgebridge-aeb/data`
+3. **이미지** 탭 → 받은 이미지 선택 → **실행**.
+4. 컨테이너 설정:
+   - **컨테이너 이름**: `edgebridge-aeb`
+   - **자동 재시작 활성화** 체크
+5. **고급 설정 → 포트 설정**: 로컬 포트 `8088` ↔ 컨테이너 포트 `8088` (TCP)
+6. **고급 설정 → 볼륨 → 폴더 추가**:
+   - 파일/폴더(NAS): `/docker/edgebridge-aeb/data`  →  마운트 경로(컨테이너): `/data`
+   - (선택) `edgebridge.cfg` 파일 → 마운트 경로 `/usr/src/app/edgebridge.cfg`
+7. **적용 → 완료** → 컨테이너 실행.
+
+### 방법 B — Container Manager 프로젝트 (docker compose)
+1. **File Station** 에서 폴더 생성 후 [`docker-compose.yml`](docker-compose.yml) 업로드.
+2. **Container Manager → 프로젝트 → 생성** → 경로를 그 폴더로 지정 → 기존 `docker-compose.yml` 사용 → 빌드/실행.
+
+### 동작 확인 (시놀로지)
+- Container Manager → 컨테이너 → **로그** 탭에 아래가 보이면 정상:
+  ```
+  Forwarding Bridge Server v... [edgebridge-aeb]
+   > Serving HTTP on <ip>:8088
+  ```
+- 같은 LAN PC에서 (NAS IP 가 `192.168.1.10` 이라고 가정):
+  ```sh
+  curl -i http://192.168.1.10:8088/api/ping      # 200 OK
+  curl http://192.168.1.10:8088/api/redirect      # []  (빈 목록이 정상)
+  ```
+
+---
+
+## 🍓 라즈베리파이 설치 (자세히)
+
+> **Raspberry Pi OS 64-bit** 권장 (Pi 3 / 4 / 5 / Zero 2 W). 공식 이미지는 `linux/arm64`.
+
+### 1) Docker 설치 (한 번만)
+```sh
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER     # 로그아웃 후 재로그인하면 sudo 없이 docker 사용
+```
+
+### 2) 실행
+```sh
+mkdir -p ~/edgebridge-aeb/data && cd ~/edgebridge-aeb
+docker run -d --name edgebridge-aeb \
+  -p 8088:8088 \
+  -v $(pwd)/data:/data \
+  --restart unless-stopped \
+  woobooung/edgebridge-aeb:latest
+```
+
+### 3) 동작 확인 (라즈베리파이)
+```sh
+docker logs edgebridge-aeb            # 'Serving HTTP on ...:8088' 확인
+curl -i http://localhost:8088/api/ping
+docker ps                            # STATUS 가 Up 이면 정상, 부팅 시 자동 시작됨
+```
+
+### 4) 업데이트 / 중지 / 삭제
+```sh
+docker pull woobooung/edgebridge-aeb:latest   # 최신으로 갱신
+docker rm -f edgebridge-aeb && (위 2) 재실행)  # 새 이미지로 재기동
+docker stop edgebridge-aeb                     # 중지
+```
+
+> **32비트(armv7) Pi** (Pi 1 / 2 / Zero / Zero W) 는 공식 이미지에 없습니다.
+> 64-bit OS 로 재설치하거나, 소스에서 직접 빌드하세요
+> (`git clone` 후 `docker build -t edgebridge-aeb .`; cryptography 컴파일에 `build-essential libffi-dev cargo` 필요).
+> 또는 아래 **venv 직접 실행** 방식을 쓰면 piwheels 가 cryptography 휠을 제공하므로 32비트에서도 동작합니다.
+
+---
+
+## 🔌 Edge 드라이버에서 브리지 사용
+드라이버가 호출하는 기준 주소는 `http://<브리지-IP>:8088` 입니다. 예 (NAS/Pi IP = `192.168.1.10`):
+```
+GET http://192.168.1.10:8088/api/forward?url=https://api.smartthings.com/v1/devices
+```
+SmartThings API 호출 시 토큰을 자동 주입하려면 `edgebridge.cfg` 의 `SmartThings_Bearer_Token` 에 36자 PAT 를 넣으세요.
+MQTT 브리지 연동은 참고 드라이버 [WooBooung/EdgeBridgeBaseDriver](https://github.com/WooBooung/EdgeBridgeBaseDriver) 의 `/mqtt/*` 흐름을 보세요.
+
+> **네트워크 주의:** 허브가 NAS 의 매핑 포트로 직접 접근이 안 되는 분리망이라면, 브리지가 자체 LAN IP 를 갖도록
+> **macvlan** 을 쓰세요 — 저장소 [`docker/docker-compose.yml`](docker/docker-compose.yml) 에 예시가 있습니다.
 
 ---
 
