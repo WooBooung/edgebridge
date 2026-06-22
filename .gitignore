@@ -1,1 +1,8 @@
 .registrations
+redirects.jsonl
+callbacks.jsonl
+mqtt_certs/
+data/
+edgebridge.log
+__pycache__/
+*.pyc

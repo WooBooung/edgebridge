@@ -1,0 +1,21 @@
+# edgebridge-aeb -- simple host-port deployment (works on Synology Container Manager & Raspberry Pi).
+#
+# The SmartThings hub reaches the bridge at  http://<host-ip>:8088 .
+# Pull the published image instead of building:  image: woobooung/edgebridge-aeb:latest
+#
+# If your hub cannot reach the host's mapped port (some segmented networks), use a macvlan
+# network so the bridge gets its own LAN IP -- see docker/docker-compose.yml for that example.
+
+services:
+  edgebridge:
+    image: woobooung/edgebridge-aeb:latest
+    # To build locally instead of pulling, comment out `image:` above and uncomment:
+    # build: .
+    container_name: edgebridge-aeb
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./data:/data
+      # Optionally externalize the config file:
+      # - ./edgebridge.cfg:/usr/src/app/edgebridge.cfg
+    restart: unless-stopped
