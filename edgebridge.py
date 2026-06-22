@@ -1188,6 +1188,34 @@ def process_config(config_filename):
         except Exception:
             print('Using output config defaults')
 
+    # Environment-variable overrides (handy on Docker / Synology Container Manager,
+    # where adding an env var is much easier than mounting a config file).
+    env_token = os.environ.get('EB_ST_TOKEN', '').strip()
+    if env_token:
+        SMARTTHINGS_TOKEN = 'Bearer ' + env_token
+    env_port = os.environ.get('EB_SERVER_PORT', '').strip()
+    if env_port:
+        try:
+            p = int(env_port)
+            if 0 < p <= MAXPORT:
+                SERVER_PORT = p
+        except ValueError:
+            pass
+    env_ip = os.environ.get('EB_SERVER_IP', '').strip()
+    if env_ip:
+        SERVER_IP = env_ip
+    env_fw = os.environ.get('EB_FW_TIMEOUT', '').strip()
+    if env_fw:
+        try:
+            FWTIMEOUT = int(env_fw)
+        except ValueError:
+            pass
+    if os.environ.get('EB_MDNS_ENABLED', '').strip().lower() in ('no', 'false', '0'):
+        MDNS_ENABLED = False
+    env_mdns_name = os.environ.get('EB_MDNS_NAME', '').strip()
+    if env_mdns_name:
+        MDNS_NAME = env_mdns_name
+
     os.makedirs(DATA_DIR, exist_ok=True)
     log = logger(conoutp, logoutp, logfile, False)
 

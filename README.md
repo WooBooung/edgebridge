@@ -356,6 +356,23 @@ mDNS_name = EdgeBridge-aeb        # 드라이버가 찾는 광고 이름 (그대
 - `Data_Dir` 는 **비워두세요** — 환경변수 `EB_DATA_DIR`(=`/data`)가 우선합니다.
 - `mDNS_enabled` / `mDNS_name` 은 **안 적어도 기본 켜짐**입니다. 끄거나 이름 바꿀 때만 사용.
 
+### 🐳 환경 변수로 설정 (Docker 권장 — cfg 파일 마운트 불필요)
+시놀로지 Container Manager 등에서는 **cfg 파일을 마운트하는 대신 "환경 변수"** 로 넣는 게 훨씬 간단합니다.
+환경 변수가 cfg 보다 **우선** 적용됩니다.
+
+| 환경 변수 | 역할 | 예시 |
+|-----------|------|------|
+| `EB_ST_TOKEN` | SmartThings PAT(36자) — `api.smartthings.com` 자동 주입 + ping 유효성 | `xxxxxxxx-xxxx-...` |
+| `EB_SERVER_PORT` | 컨테이너 내부 수신 포트 (기본 8088) | `8088` |
+| `EB_SERVER_IP` | 바인딩 IP (보통 비움) | |
+| `EB_FW_TIMEOUT` | forward 타임아웃(초) | `15` |
+| `EB_MDNS_ENABLED` | mDNS 끄기 | `no` |
+| `EB_MDNS_NAME` | mDNS 광고 이름 | `EdgeBridge-aeb` |
+| `EB_DATA_DIR` | 데이터 경로 (Docker 기본 `/data`) | `/data` |
+
+> 예: **PAT만 넣고 싶다** → Container Manager **환경** 탭에 `EB_ST_TOKEN` = `<36자 PAT>` 한 줄만 추가하면 끝.
+> cfg 파일도, 볼륨 마운트도 필요 없습니다. (`docker run` 이면 `-e EB_ST_TOKEN=<PAT>`)
+
 ---
 
 ## 🛠️ 직접 빌드/배포하기 (GitHub Actions → Docker Hub)
