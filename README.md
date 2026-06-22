@@ -33,6 +33,8 @@
 | `/mqtt/*` MQTT 브리지 (mTLS 구독 → 허브 포워딩) | 없음 | ✅ **이식** ([스펙](mqtt-bridge-spec-v0.3.md)) |
 | `/api/redirect` (path→URL 영속 매핑 + 자동 프록시) | 없음 | ✅ **이식** |
 | `/api/callback` (name 키로 임의 값 저장/조회) | 없음 | ✅ **이식** |
+| **mDNS 자동 발견** (`_edgebridge._tcp`) | 없음 | ✅ **이식** (드라이버가 브리지 자동 검색, host 네트워크 필요) |
+| `/api/ping` | 단순 200 | ✅ **AEB 호환 JSON** (battery=100, bridgeVersion, mqtt 세션 요약 등) |
 | 데이터 영속화 | `.registrations` 만 | `.registrations` + `redirects.jsonl` + `callbacks.jsonl` (data dir) |
 | 멀티아치 Docker 이미지 자동배포 | 수동 빌드 | ✅ **GitHub Actions → Docker Hub (amd64/arm64)** |
 | 동시 요청 처리 | 단일 스레드 | **ThreadingHTTPServer (멀티 스레드)** |
@@ -40,7 +42,7 @@
 ### 이식하지 **않은** 것 (AEB 대비)
 - `/api/llm` (LLM 직접 호출) — 의도적으로 제외, 호출 시 404.
 - Bluetooth(BT) 경로 API — 제외.
-- AEB 확장 `/api/ping`(battery/bridgeDevice 등) — 원작처럼 단순 200 응답만 유지.
+- AEB ping의 `pub_key`(Config Sync), `supportedAiOptions`(LLM), OAuth 토큰 필드 — 미이식 기능이라 ping에서 빈값/false 처리.
 - `/api/forward` 의 ST OAuth access_token 자동 갱신 주입 — 헤드리스 Docker 환경에 부적합하여 제외.
   대신 원작과 동일하게 **config 의 PAT(`SmartThings_Bearer_Token`)** 를 `api.smartthings.com` 요청에 자동 주입.
 
@@ -163,8 +165,66 @@ GET http://192.168.1.10:8088/api/forward?url=https://api.smartthings.com/v1/devi
 SmartThings API 호출 시 토큰을 자동 주입하려면 `edgebridge.cfg` 의 `SmartThings_Bearer_Token` 에 36자 PAT 를 넣으세요.
 MQTT 브리지 연동은 참고 드라이버 [WooBooung/EdgeBridgeBaseDriver](https://github.com/WooBooung/EdgeBridgeBaseDriver) 의 `/mqtt/*` 흐름을 보세요.
 
-> **네트워크 주의:** 허브가 NAS 의 매핑 포트로 직접 접근이 안 되는 분리망이라면, 브리지가 자체 LAN IP 를 갖도록
-> **macvlan** 을 쓰세요 — 저장소 [`docker/docker-compose.yml`](docker/docker-compose.yml) 에 예시가 있습니다.
+---
+
+## 🌐 네트워크 모드 & mDNS 자동 발견 (중요)
+
+브리지의 **일부 기능은 "나에게 연락한 상대(허브)의 진짜 LAN IP"** 를 알아야 합니다:
+- **device→hub 포워딩**, **MQTT 메시지 허브 전달**, **mDNS 자동 발견(`_edgebridge._tcp`)**.
+
+그런데 Docker **bridge 네트워크**로 띄우면 들어오는 모든 요청의 출발지가 도커 게이트웨이(`172.17.0.1`)로 보여서
+이 기능들이 제대로 동작하지 않습니다. (반면 `/api/forward` 같은 요청·응답형 기능은 **영향 없음**.)
+
+### 권장: host 네트워크로 실행
+```sh
+docker run -d --name edgebridge-aeb \
+  --network host \
+  -v $(pwd)/data:/data \
+  --restart unless-stopped \
+  woobooung/edgebridge-aeb:latest
+```
+- host 모드는 **포트 매핑(`-p`)이 없습니다.** 브리지는 호스트의 `Server_Port`(기본 **8088**)로 직접 수신 → `http://<호스트-IP>:8088`.
+- 8088이 충돌하면 `edgebridge.cfg` 의 `Server_Port` 를 바꾸세요.
+- compose 는 [`docker-compose.host.yml`](docker-compose.host.yml) 사용: `docker compose -f docker-compose.host.yml up -d`
+
+#### 시놀로지에서 host 네트워크로 바꾸기
+Container Manager 는 **기존 컨테이너의 네트워크를 못 바꿉니다.** 재생성하세요:
+1. 컨테이너 **중지 → 삭제** (이미지·데이터 폴더는 유지)
+2. 이미지에서 **실행** → **네트워크** 단계에서 **"Docker 호스트와 동일한 네트워크 사용"** 선택
+3. **포트 설정은 비워둠**(host 모드는 매핑 없음)
+4. 볼륨 `/data` 연결 → 실행 → `http://<NAS-IP>:8088` 로 접속
+
+### mDNS 자동 발견
+host(또는 macvlan) 네트워크에서 브리지는 **`_edgebridge._tcp`** 서비스로 자신을 광고합니다
+(instance `EdgeBridge-aeb`, TXT `install_id`/`version`). [EdgeBridgeBaseDriver](https://github.com/WooBooung/EdgeBridgeBaseDriver)
+등 mDNS 발견을 지원하는 드라이버가 **브리지 IP/포트를 자동으로 잡습니다** — 드라이버에 주소를 수동 입력할 필요가 없습니다.
+- 끄려면 `edgebridge.cfg` 의 `mDNS_enabled = no`, 이름은 `mDNS_name` 으로 변경.
+- ⚠️ **bridge 네트워크에선 mDNS 멀티캐스트가 LAN 으로 안 나가서 동작하지 않습니다** (서버는 정상, 발견만 안 됨).
+
+> 대안: 분리망이거나 host 모드를 못 쓰면 **macvlan** 으로 브리지에 자체 LAN IP 부여 — [`docker/docker-compose.yml`](docker/docker-compose.yml) 예시.
+
+---
+
+## ⚙️ /api/ping (AEB 호환 상태 JSON)
+`GET|POST /api/ping` 은 AEB 와 동일한 형태의 JSON 을 반환합니다 (기존 200 체크 모니터와도 호환):
+```jsonc
+{
+  "battery": 100,                 // 서버는 항상 전원 연결 → 100 고정
+  "bridgeDevice": "server",
+  "bridgeVersion": "1.x..._AEB",
+  "serverStartTime": "06/23 14:30",
+  "supportedAiOptions": [],       // LLM 미이식
+  "stOauthConnected": false,      // OAuth 미이식 (config PAT 사용)
+  "mqtt": { "total": 1, "connected": 1, "sessions": [ {"id":"sess_...","state":"CONNECTED","lastError":null} ] },
+  "blocked": { "hosts": 0, "attempts": 0 }
+}
+```
+
+---
+
+## ⚠️ 운영 주의사항 (코드 버그 아님)
+1. **forward 타임아웃 기본 5초** — 느린 외부 API 는 502 가 날 수 있습니다. `edgebridge.cfg` 의 `forwarding_timeout` 을 늘리세요.
+2. **네트워크 모드** — 위 "🌐 네트워크 모드" 참고. MQTT/허브 포워딩/mDNS 를 쓰면 **host 네트워크 권장**.
 
 ---
 

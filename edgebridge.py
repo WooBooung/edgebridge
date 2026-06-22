@@ -59,6 +59,14 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 # ==========================================
 
+# ====== mDNS / DNS-SD advertisement (optional) ======
+try:
+    from zeroconf import ServiceInfo, Zeroconf
+    HAVE_ZEROCONF = True
+except Exception:
+    HAVE_ZEROCONF = False
+# ====================================================
+
 registrations = []
 hubsenderrors = {}
 regdeletelist = []
@@ -87,6 +95,17 @@ DATA_DIR = os.environ.get('EB_DATA_DIR', os.getcwd())
 CALLBACK_NAME_REGEX = re.compile(r'^[A-Za-z0-9_\-]+$')
 CALLBACK_MAX_VALUE_BYTES = 64 * 1024
 MQTT_RING_MAX = 200
+
+# mDNS advertisement (matches AEB / EdgeBridgeBaseDriver: service type "_edgebridge._tcp")
+MDNS_ENABLED = True
+MDNS_NAME = 'EdgeBridge-aeb'
+MDNS_TYPE = '_edgebridge._tcp.local.'
+_zeroconf = None
+_mdns_info = None
+
+# Server start time (for /api/ping)
+SERVER_STARTED_AT = int(time.time() * 1000)
+SERVER_START_STR = time.strftime('%m/%d %H:%M')
 
 
 class logger(object):
@@ -208,6 +227,94 @@ def save_jsonl(filename, store):
 
 def now_ms():
     return int(time.time() * 1000)
+
+
+# =============================================================================
+#  mDNS / DNS-SD advertisement  (so Edge drivers auto-discover the bridge)
+#  Service type "_edgebridge._tcp", instance "EdgeBridge*", TXT install_id+version
+#  -- matches AEB and the WooBooung/EdgeBridgeBaseDriver discovery code.
+#  NOTE: mDNS multicast only works on host/macvlan networking, not Docker bridge.
+# =============================================================================
+
+def get_install_id():
+    p = data_path('install_id')
+    try:
+        if os.path.exists(p):
+            with open(p) as f:
+                v = f.read().strip()
+                if v:
+                    return v
+    except Exception:
+        pass
+    v = str(uuid.uuid4())
+    try:
+        with open(p, 'w') as f:
+            f.write(v)
+    except Exception:
+        pass
+    return v
+
+
+def start_mdns(ip, port):
+    global _zeroconf, _mdns_info
+    if not MDNS_ENABLED:
+        return
+    if not HAVE_ZEROCONF:
+        log.warn('mDNS requested but the "zeroconf" package is not installed -- skipping')
+        return
+    try:
+        info = ServiceInfo(
+            MDNS_TYPE,
+            f'{MDNS_NAME}.{MDNS_TYPE}',
+            addresses=[socket.inet_aton(ip)],
+            port=port,
+            properties={'install_id': get_install_id(), 'version': VERSION},
+            server=f'{MDNS_NAME.replace(" ", "-")}.local.',
+        )
+        zc = Zeroconf()
+        zc.register_service(info)
+        _zeroconf, _mdns_info = zc, info
+        log.hilite(f' > mDNS advertised as "{MDNS_NAME}" ({MDNS_TYPE}) at {ip}:{port}')
+    except Exception as e:
+        log.warn(f'mDNS registration failed (expected in Docker bridge mode; use host networking): {e}')
+
+
+def stop_mdns():
+    global _zeroconf, _mdns_info
+    try:
+        if _zeroconf and _mdns_info:
+            _zeroconf.unregister_service(_mdns_info)
+            _zeroconf.close()
+    except Exception:
+        pass
+    _zeroconf = None
+    _mdns_info = None
+
+
+# =============================================================================
+#  /api/ping  (AEB-compatible health JSON; battery=100 since a server is powered)
+# =============================================================================
+
+def build_ping():
+    sessions = []
+    connected = 0
+    for s in aeb_sessions.values():
+        state = s.get('state', 'CREATED')
+        if state == 'CONNECTED':
+            connected += 1
+        sessions.append({'id': s['id'], 'state': state, 'lastError': s.get('lastError')})
+    return {
+        'battery': 100,                 # always powered (not an Android device)
+        'bridgeDevice': 'server',
+        'bridgeVersion': VERSION,
+        'serverStartTime': SERVER_START_STR,
+        'supportedAiOptions': [],       # LLM not ported
+        'stOauthConnected': False,      # OAuth not ported (config PAT only)
+        'accessTokenExpiresAt': None,
+        'accessTokenMinutesLeft': None,
+        'mqtt': {'total': len(aeb_sessions), 'connected': connected, 'sessions': sessions},
+        'blocked': {'hosts': 0, 'attempts': 0},
+    }
 
 
 # =============================================================================
@@ -890,8 +997,7 @@ def handle_api(server):
     elif endpoint == 'callback':
         handle_callback(server, method, parts)
     elif endpoint == 'ping':
-        # original behaviour: simple 200 (AEB battery/bridgeDevice ping is intentionally NOT ported)
-        http_response(server, 200, '')
+        send_json(server, 200, build_ping())
     elif endpoint == 'llm':
         # LLM endpoint intentionally NOT ported
         send_json(server, 404, {'error': {'code': 'NOT_SUPPORTED', 'message': 'LLM endpoint not available in edgebridge-aeb'}})
@@ -949,7 +1055,7 @@ class myHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         if '/api/ping' in self.path:
             log.debug('Pingreq')
-            http_response(self, 200, '')
+            send_json(self, 200, build_ping())
             return
         proc_msg(self)
 
@@ -959,7 +1065,7 @@ class myHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if '/api/ping' in self.path:
             log.debug('Pingreq')
-            http_response(self, 200, '')
+            send_json(self, 200, build_ping())
             return
         proc_msg(self)
 
@@ -981,6 +1087,7 @@ class ThreadingHTTPServer(http.server.ThreadingHTTPServer):
 
 def process_config(config_filename):
     global SERVER_PORT, SERVER_IP, SMARTTHINGS_TOKEN, FWTIMEOUT, DATA_DIR, log
+    global MDNS_ENABLED, MDNS_NAME
     SERVER_IP = ''
     SERVER_PORT = DEFAULT_SERVERPORT
     SMARTTHINGS_TOKEN = DEFAULT_ST_TOKEN
@@ -1030,6 +1137,18 @@ def process_config(config_filename):
                 pass
 
         try:
+            if parser.get('config', 'mDNS_enabled').lower() in ('no', 'false', '0'):
+                MDNS_ENABLED = False
+        except Exception:
+            pass
+        try:
+            name = parser.get('config', 'mDNS_name')
+            if name:
+                MDNS_NAME = name
+        except Exception:
+            pass
+
+        try:
             conoutp = parser.get('config', 'console_output').lower() == 'yes'
             if parser.get('config', 'logfile_output').lower() == 'yes':
                 logoutp = True
@@ -1047,6 +1166,9 @@ def process_config(config_filename):
 if __name__ == '__main__':
     if platform.system() == 'Windows':
         os.system('color')
+
+    SERVER_STARTED_AT = int(time.time() * 1000)
+    SERVER_START_STR = time.strftime('%m/%d %H:%M')
 
     process_config(CONFIGFILENAME)
     registrations = read_regs(REGSFILENAME)
@@ -1074,7 +1196,11 @@ if __name__ == '__main__':
         log.hilite(f' > Data directory: {DATA_DIR}')
         log.hilite(f' > Loaded {len(redirects)} redirect(s), {len(callbacks)} callback(s)')
 
+        start_mdns(myip, SERVER_PORT)
+
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
             log.warn('INFO: Application interrupted by user...\n')
+        finally:
+            stop_mdns()
