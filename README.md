@@ -85,18 +85,29 @@ docker compose up -d
 
 > 대부분의 시놀로지(Intel/AMD = amd64, 최신 ARM 모델 = arm64)에서 동작합니다. 멀티 아키텍처라 CPU에 맞는 이미지가 자동 선택됩니다.
 
-### 방법 A — Container Manager GUI (권장)
-1. **DSM → Container Manager → 레지스트리** 탭에서 `woobooung/edgebridge-aeb` 검색 → **다운로드** → 태그 `latest` 선택.
-2. (선택) **File Station** 에서 데이터 폴더를 미리 생성: 예) `/docker/edgebridge-aeb/data`
+### 📁 먼저: 폴더 구조 & 설정 파일 위치
+File Station 에서 아래처럼 만드세요. **`edgebridge.cfg` 는 `data` 폴더 _안_ 이 아니라 _바깥(나란히)_ 에 둡니다.**
+```
+/docker/edgebridge-aeb/
+├── data/              →  컨테이너 /data 로 마운트 (등록·redirect·callback·인증서 영속 저장)
+└── edgebridge.cfg     →  컨테이너 /usr/src/app/edgebridge.cfg 로 마운트 (설정 파일)
+```
+- 둘은 컨테이너 안에서 **서로 다른 경로로 따로 연결**되므로 cfg 를 data 안에 넣을 필요가 없습니다.
+- **`edgebridge.cfg` 는 선택입니다.** 기본값(포트 8088 · PAT 없음 · mDNS 켜짐)으로 충분하면 cfg 없이 `data` 폴더만 연결해도 됩니다. PAT 입력·포트 변경 등이 필요할 때만 만들어 마운트하세요. (내용은 아래 [⚙️ 설정 파일](#️-설정-파일-edgebridgecfg) 참고)
+
+### 설치 순서 (방법 A — Container Manager GUI, 권장)
+1. **File Station** 에서 위 [폴더 구조](#-먼저-폴더-구조--설정-파일-위치)대로 `/docker/edgebridge-aeb/data` 폴더 생성 (cfg 쓸 거면 `edgebridge.cfg` 도 그 옆에 준비).
+2. **DSM → Container Manager → 레지스트리** 탭에서 `woobooung/edgebridge-aeb` 검색 → **다운로드** → 태그 `latest` 선택.
 3. **이미지** 탭 → 받은 이미지 선택 → **실행**.
-4. 컨테이너 설정:
-   - **컨테이너 이름**: `edgebridge-aeb`
-   - **자동 재시작 활성화** 체크
-5. **고급 설정 → 포트 설정**: 로컬 포트 `8088` ↔ 컨테이너 포트 `8088` (TCP)
-6. **고급 설정 → 볼륨 → 폴더 추가**:
-   - 파일/폴더(NAS): `/docker/edgebridge-aeb/data`  →  마운트 경로(컨테이너): `/data`
-   - (선택) `edgebridge.cfg` 파일 → 마운트 경로 `/usr/src/app/edgebridge.cfg`
+4. 컨테이너 설정: **이름** `edgebridge-aeb`, **자동 재시작 활성화** 체크.
+5. **고급 설정 → 포트 설정**: 로컬 포트(원하는 값, 예 `8088` 또는 `8808`) : **컨테이너 포트 `8088`(고정)** · TCP.
+6. **고급 설정 → 볼륨 → 폴더 추가** (2개):
+   - 폴더 `/docker/edgebridge-aeb/data`  →  마운트 경로 **`/data`**
+   - (선택) 파일 `/docker/edgebridge-aeb/edgebridge.cfg`  →  마운트 경로 **`/usr/src/app/edgebridge.cfg`**
 7. **적용 → 완료** → 컨테이너 실행.
+
+> **포트 핵심:** 컨테이너 포트는 앱이 내부에서 듣는 **`8088` 고정**. 로컬 포트만 원하는 값으로. cfg 에서 `Server_Port` 를 바꿨다면 컨테이너 포트도 그 값과 같아야 합니다.
+> *(host 네트워크로 띄우면 포트 매핑이 없고 호스트의 `Server_Port` 8088 로 직접 수신 — [🌐 네트워크 모드](#-네트워크-모드--mdns-자동-발견-중요) 참고)*
 
 ### 방법 B — Container Manager 프로젝트 (docker compose)
 1. **File Station** 에서 폴더 생성 후 [`docker-compose.yml`](docker-compose.yml) 업로드.
@@ -324,18 +335,26 @@ GET    /api/callback/mytoken              # 단건 값(plain text), 없으면 40
 ---
 
 ## ⚙️ 설정 파일 (`edgebridge.cfg`)
+
+**cfg 는 선택입니다.** 안 만들면 아래 기본값으로 동작합니다 (포트 8088 · PAT 없음 · mDNS 켜짐).
+PAT 입력·포트 변경 등이 필요할 때만 만들어서 컨테이너의 `/usr/src/app/edgebridge.cfg` 로 마운트하세요.
+(Docker 에서의 폴더 배치는 위 [📁 폴더 구조](#-먼저-폴더-구조--설정-파일-위치) 참고 — `data` 폴더와 **나란히** 둡니다.)
+
 ```ini
 [config]
-Server_IP =                       # 비우면 자동 감지
-Server_Port = 8088
-SmartThings_Bearer_Token =        # 선택: 36자 PAT (api.smartthings.com 자동 주입)
-forwarding_timeout = 5
+Server_IP =                       # 비우면 자동 감지 (Docker 에선 비워두세요)
+Server_Port = 8088                # 컨테이너 내부 수신 포트
+SmartThings_Bearer_Token =        # 선택: 36자 PAT (api.smartthings.com 자동 주입 + ping 유효성 표시)
+forwarding_timeout = 5            # 느린 외부 API 면 늘리기
 console_output = yes
 logfile_output = no
 logfile = edgebridge.log
-Data_Dir =                        # 비우면 현재 디렉터리. Docker 는 EB_DATA_DIR=/data 사용
+Data_Dir =                        # 비워두세요. Docker 는 EB_DATA_DIR=/data 를 자동 우선 사용
+mDNS_enabled = yes                # 기본 켜짐. 끄려면 no (host 네트워크에서만 실제 동작)
+mDNS_name = EdgeBridge-aeb        # 드라이버가 찾는 광고 이름 (그대로 두면 됨)
 ```
-환경변수 `EB_DATA_DIR` 가 `Data_Dir` 보다 우선합니다.
+- `Data_Dir` 는 **비워두세요** — 환경변수 `EB_DATA_DIR`(=`/data`)가 우선합니다.
+- `mDNS_enabled` / `mDNS_name` 은 **안 적어도 기본 켜짐**입니다. 끄거나 이름 바꿀 때만 사용.
 
 ---
 
