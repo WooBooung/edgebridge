@@ -295,6 +295,32 @@ def stop_mdns():
 #  /api/ping  (AEB-compatible health JSON; battery=100 since a server is powered)
 # =============================================================================
 
+# SmartThings PAT validity (cached) -- reported as stOauthConnected in /api/ping.
+_st_pat_valid = False
+_st_pat_checked_at = 0.0
+ST_PAT_TTL = 300   # re-validate at most every 5 minutes
+
+
+def st_pat_valid():
+    """True if a PAT is configured in edgebridge.cfg AND SmartThings accepts it
+    (any response other than 401). Cached for ST_PAT_TTL seconds."""
+    global _st_pat_valid, _st_pat_checked_at
+    if not SMARTTHINGS_TOKEN:
+        return False
+    now = time.time()
+    if (now - _st_pat_checked_at) < ST_PAT_TTL:
+        return _st_pat_valid
+    _st_pat_checked_at = now
+    try:
+        r = requests.get('https://api.smartthings.com/v1/locations',
+                         headers={'Authorization': SMARTTHINGS_TOKEN}, timeout=4)
+        _st_pat_valid = (r.status_code != 401)   # 401 = bad/expired token; 200/403 = token accepted
+    except Exception as e:
+        log.warn(f'PAT validity check failed: {e}')
+        _st_pat_valid = False
+    return _st_pat_valid
+
+
 def build_ping():
     sessions = []
     connected = 0
@@ -303,13 +329,16 @@ def build_ping():
         if state == 'CONNECTED':
             connected += 1
         sessions.append({'id': s['id'], 'state': state, 'lastError': s.get('lastError')})
+    pat_ok = st_pat_valid()
     return {
         'battery': 100,                 # always powered (not an Android device)
         'bridgeDevice': 'server',
         'bridgeVersion': VERSION,
         'serverStartTime': SERVER_START_STR,
         'supportedAiOptions': [],       # LLM not ported
-        'stOauthConnected': False,      # OAuth not ported (config PAT only)
+        'stOauthConnected': pat_ok,     # true when the configured PAT is valid
+        'stTokenConfigured': bool(SMARTTHINGS_TOKEN),
+        'stTokenValid': pat_ok,
         'accessTokenExpiresAt': None,
         'accessTokenMinutesLeft': None,
         'mqtt': {'total': len(aeb_sessions), 'connected': connected, 'sessions': sessions},
