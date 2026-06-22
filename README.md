@@ -136,6 +136,7 @@ SmartThings PAT 주입·포트 변경 같은 설정이 필요할 때, 두 방법
    SmartThings_Bearer_Token = xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
    ```
    → `/docker/edgebridge-aeb/edgebridge.cfg` 로 업로드 (`data` 폴더와 **나란히**).
+   > ⚠️ **토큰은 따옴표 없이** 붙여넣으세요. `"..."` 로 감싸면 36자를 초과해 무시됩니다.
    > ⚠️ "파일 추가" 마운트는 **이미 존재하는 파일**만 고를 수 있어 먼저 만들어둬야 합니다.
 2. **컨테이너 재생성** — 실행 중엔 볼륨 변경이 어려우니 **중지 → 삭제 → 다시 생성**. (데이터는 `/data` 볼륨에 남아 안전)
 3. 생성 마법사의 **스토리지(볼륨)** 단계에서 마운트 2개 추가:
@@ -384,7 +385,7 @@ PAT 입력·포트 변경 등이 필요할 때만 만들어서 컨테이너의 `
 [config]
 Server_IP =                       # 비우면 자동 감지 (Docker 에선 비워두세요)
 Server_Port = 8088                # 컨테이너 내부 수신 포트
-SmartThings_Bearer_Token =        # 선택: 36자 PAT (api.smartthings.com 자동 주입 + ping 유효성 표시)
+SmartThings_Bearer_Token =        # 선택: 36자 PAT, 따옴표 없이! (api.smartthings.com 자동 주입 + ping 유효성)
 forwarding_timeout = 5            # 느린 외부 API 면 늘리기
 console_output = yes
 logfile_output = no

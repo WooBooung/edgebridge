@@ -1142,11 +1142,12 @@ def process_config(config_filename):
             print(f'\033[31mMissing port from config file; using default: {DEFAULT_SERVERPORT}\033[0m')
 
         try:
-            config_token = parser.get('config', 'SmartThings_Bearer_Token')
+            # strip whitespace and accidental surrounding quotes (configparser keeps quotes as-is)
+            config_token = parser.get('config', 'SmartThings_Bearer_Token').strip().strip('"').strip("'").strip()
             if len(config_token) == TOKEN_LENGTH:
                 SMARTTHINGS_TOKEN = 'Bearer ' + config_token
-            else:
-                print('\033[31mInvalid SmartThings Token from config file; assumed None\033[0m')
+            elif config_token:
+                print('\033[31mInvalid SmartThings Token from config file (expected 36 chars); assumed None\033[0m')
         except Exception:
             pass
 
@@ -1190,7 +1191,7 @@ def process_config(config_filename):
 
     # Environment-variable overrides (handy on Docker / Synology Container Manager,
     # where adding an env var is much easier than mounting a config file).
-    env_token = os.environ.get('EB_ST_TOKEN', '').strip()
+    env_token = os.environ.get('EB_ST_TOKEN', '').strip().strip('"').strip("'").strip()
     if env_token:
         SMARTTHINGS_TOKEN = 'Bearer ' + env_token
     env_port = os.environ.get('EB_SERVER_PORT', '').strip()
