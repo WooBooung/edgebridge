@@ -51,17 +51,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      # Sync the GitHub README to the Docker Hub repository "Overview" page,
-      # and set the short description (the GitHub link is in the README body).
-      - name: Update Docker Hub description
-        if: github.ref == 'refs/heads/main'
-        continue-on-error: true   # best-effort: a PAT may lack description-write scope; don't fail the build
-        uses: peter-evans/dockerhub-description@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
-          # Docker Hub short description has a 100-char limit -- keep it short or the sync fails.
-          short-description: "SmartThings Edge bridge — edgebridge fork + AEB MQTT/redirect/callback, 한글 fix"
-          readme-filepath: ./README.md
+      # NOTE: Docker Hub "Overview" / short description are set manually in the web UI.
+      # Docker Hub's description API rejects PATs (needs password-based login), so an
+      # automated sync step is intentionally omitted here.
