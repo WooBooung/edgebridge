@@ -8,6 +8,13 @@
 # For 32-bit ARM (armv7) see the README -- build locally with build tooling.
 FROM python:3.12-slim
 
+# OCI labels -- Docker Hub / GHCR show these as the "Source repository" link & description.
+LABEL org.opencontainers.image.title="edgebridge-aeb" \
+      org.opencontainers.image.description="SmartThings Edge forwarding bridge -- toddaustin07/edgebridge fork with AEB MQTT bridge, redirect/callback APIs, and a multi-byte (Korean) truncation fix." \
+      org.opencontainers.image.source="https://github.com/WooBooung/edgebridge" \
+      org.opencontainers.image.url="https://github.com/WooBooung/edgebridge" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
 WORKDIR /usr/src/app
 
 COPY requirements.txt .
