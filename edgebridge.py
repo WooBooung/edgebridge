@@ -648,24 +648,35 @@ def handle_aeb_routes(server):
 #  /api/forward  (original feature + multi-byte truncation fix + PUT/DELETE/PATCH)
 # =============================================================================
 
+BROWSER_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+
+
 def build_headers(server, path):
     headers = {}
     # 'accept-encoding' is dropped so `requests` performs transparent gzip decompression
     # and we forward already-decompressed bytes (Content-Encoding must NOT be re-advertised).
-    ignored = ['user-agent', 'host', 'te', 'connection', 'accept-encoding', 'content-length']
+    ignored = ['host', 'te', 'connection', 'accept-encoding', 'content-length']
+    present = set()
     for key, value in server.headers.items():
         if key.lower() not in ignored:
             headers[key] = value
+            present.add(key.lower())
 
     if 'api.smartthings.com' in path:
-        if 'authorization' not in map(str.lower, server.headers.keys()):
-            if len(SMARTTHINGS_TOKEN) > 0:
-                headers['Authorization'] = SMARTTHINGS_TOKEN
+        if 'authorization' not in present and len(SMARTTHINGS_TOKEN) > 0:
+            headers['Authorization'] = SMARTTHINGS_TOKEN
 
     headers['Host'] = path.split('//')[1].split('/')[0]
-    if 'accept' not in map(str.lower, server.headers.keys()):
-        headers['Accept'] = '*/*'
-    headers['User-Agent'] = 'SmartThings Edge Hub'
+
+    # Browser-like fallbacks (added only if the caller didn't provide them) so that
+    # WAF/CDN-protected APIs (Tesla, etc.) don't reject the request with 403.
+    if 'user-agent' not in present:
+        headers['User-Agent'] = BROWSER_UA
+    if 'accept' not in present:
+        headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    if 'accept-language' not in present:
+        headers['Accept-Language'] = 'ko-KR,ko;q=0.9,en;q=0.8'
 
     if server.data_bytes:
         headers['Content-Length'] = str(len(server.data_bytes))
