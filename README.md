@@ -113,6 +113,43 @@ File Station 에서 아래처럼 만드세요. **`edgebridge.cfg` 는 `data` 폴
 1. **File Station** 에서 폴더 생성 후 [`docker-compose.yml`](docker-compose.yml) 업로드.
 2. **Container Manager → 프로젝트 → 생성** → 경로를 그 폴더로 지정 → 기존 `docker-compose.yml` 사용 → 빌드/실행.
 
+### 🔑 PAT 등 설정 적용하기 (환경 변수 또는 cfg 마운트)
+SmartThings PAT 주입·포트 변경 같은 설정이 필요할 때, 두 방법 중 하나를 쓰면 됩니다.
+
+#### 방법 1) 환경 변수 (권장 — 가장 간단)
+컨테이너 생성/수정 시 **환경(Environment)** 탭에 변수만 추가하면 끝 (파일·마운트 불필요):
+- `EB_ST_TOKEN` = `<36자 PAT>`  ← PAT 자동 주입
+- 그 외 `EB_SERVER_PORT`, `EB_FW_TIMEOUT` 등은 [환경 변수 표](#-환경-변수로-설정-docker-권장--cfg-파일-마운트-불필요) 참고
+- `docker run` 이면 `-e EB_ST_TOKEN=<PAT>`
+
+#### 방법 2) cfg 파일 마운트 (파일로 관리하고 싶을 때)
+1. **cfg 파일 만들기** — File Station 엔 텍스트 생성 기능이 없으니, PC 메모장으로 작성해 업로드합니다.
+   메모장에 아래를 넣고 **`edgebridge.cfg`** 로 저장:
+   ```ini
+   [config]
+   Server_Port = 8088
+   SmartThings_Bearer_Token = xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+   ```
+   → `/docker/edgebridge-aeb/edgebridge.cfg` 로 업로드 (`data` 폴더와 **나란히**).
+   > ⚠️ "파일 추가" 마운트는 **이미 존재하는 파일**만 고를 수 있어 먼저 만들어둬야 합니다.
+2. **컨테이너 재생성** — 실행 중엔 볼륨 변경이 어려우니 **중지 → 삭제 → 다시 생성**. (데이터는 `/data` 볼륨에 남아 안전)
+3. 생성 마법사의 **스토리지(볼륨)** 단계에서 마운트 2개 추가:
+
+   | 종류 | NAS 소스 (파일/폴더) | 마운트 경로(컨테이너) |
+   |------|----------------------|----------------------|
+   | **폴더 추가** | `/docker/edgebridge-aeb/data` | `/data` |
+   | **파일 추가** | `/docker/edgebridge-aeb/edgebridge.cfg` | `/usr/src/app/edgebridge.cfg` |
+
+   > "마운트 경로"(컨테이너 쪽)는 위 값을 **직접 타이핑**합니다. 특히 cfg 는 반드시 `/usr/src/app/edgebridge.cfg`.
+4. 포트·자동재시작 설정 후 실행. **cfg 를 수정하면 컨테이너를 재시작**해야 반영됩니다.
+
+#### 적용 확인
+같은 LAN PC에서 ping 을 호출해, 응답 JSON 의 `stOauthConnected` 가 `true` 면 PAT 가 유효하게 잡힌 것입니다:
+```sh
+curl -X POST http://<NAS-IP>:<로컬포트>/api/ping
+# ... "stOauthConnected": true ...   ← PAT 유효 ✅
+```
+
 ### 동작 확인 (시놀로지)
 - Container Manager → 컨테이너 → **로그** 탭에 아래가 보이면 정상:
   ```
