@@ -40,7 +40,6 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -63,5 +62,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
-          short-description: "SmartThings Edge forwarding bridge (toddaustin07/edgebridge fork) + AEB MQTT/redirect/callback + 한글 truncation fix. Source: github.com/WooBooung/edgebridge"
+          # Docker Hub short description has a 100-char limit -- keep it short or the sync fails.
+          short-description: "SmartThings Edge bridge — edgebridge fork + AEB MQTT/redirect/callback, 한글 fix"
           readme-filepath: ./README.md

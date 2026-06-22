@@ -32,7 +32,7 @@
 # Reads 'edgebridge.cfg' for configuration (server port/ip, SmartThings token, data dir).
 # Persists '.registrations', 'redirects.jsonl', 'callbacks.jsonl' under the data directory.
 #
-VERSION = '1.2406221200_AEB'
+VERSION = '1.0.0_AEB'
 
 import http.server
 import datetime
