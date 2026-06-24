@@ -197,6 +197,55 @@ function renderMqtt(sessions) {
   `).join('');
 }
 
+const logState = {
+  entries: [],
+  autoScroll: true,
+};
+
+function levelClass(level) {
+  if (level === 'error') return 'log-error';
+  if (level === 'warn') return 'log-warn';
+  if (level === 'hilite') return 'log-hilite';
+  if (level === 'debug') return 'log-debug';
+  return 'log-info';
+}
+
+async function loadLogs() {
+  try {
+    const data = await requestJson('/api/logs');
+    const logs = data.logs || [];
+    text('#log-count', String(logs.length));
+    const viewer = $('#log-viewer');
+    const prevLen = logState.entries.length;
+    const atBottom = viewer.scrollHeight - viewer.scrollTop - viewer.clientHeight < 40;
+    logState.entries = logs;
+    const firstNew = prevLen === 0 ? 0 : prevLen;
+    const fragment = document.createDocumentFragment();
+    for (let i = firstNew; i < logs.length; i++) {
+      const e = logs[i];
+      const div = document.createElement('div');
+      div.className = `log-line ${levelClass(e.level)}`;
+      div.innerHTML = `<span class="log-ts">${escapeHtml(e.ts)}</span> <span class="log-level">${escapeHtml(e.level)}</span> <span class="log-msg">${escapeHtml(e.msg)}</span>`;
+      fragment.appendChild(div);
+    }
+    if (firstNew === 0) {
+      viewer.innerHTML = '';
+    }
+    viewer.appendChild(fragment);
+    if (atBottom || firstNew === 0) {
+      viewer.scrollTop = viewer.scrollHeight;
+    }
+  } catch {
+    // silent
+  }
+}
+
+function clearLogs() {
+  logState.entries = [];
+  $('#log-viewer').innerHTML = '';
+  text('#log-count', '0');
+}
+
 function renderRedirects(redirects) {
   const list = $('#redirect-list');
   if (!redirects.length) {
@@ -413,6 +462,7 @@ async function init() {
   window.addEventListener('hashchange', handleNav);
   $('#refresh-button').addEventListener('click', () => loadDashboard(true));
   $('#settings-form').addEventListener('submit', saveSettings);
+  $('#log-clear').addEventListener('click', clearLogs);
   $('#setting-mdns-enabled').addEventListener('click', () => {
     const button = $('#setting-mdns-enabled');
     setSwitchState(button.dataset.on !== 'true');
@@ -427,8 +477,13 @@ async function init() {
   document.addEventListener('click', handleListClick);
   loadDashboard();
   loadSettings();
+  loadLogs();
   state.timer = window.setInterval(loadDashboard, 15000);
+  state.logTimer = window.setInterval(loadLogs, 3000);
 }
 
-window.addEventListener('beforeunload', () => window.clearInterval(state.timer));
+window.addEventListener('beforeunload', () => {
+  window.clearInterval(state.timer);
+  window.clearInterval(state.logTimer);
+});
 init();

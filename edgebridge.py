@@ -126,32 +126,40 @@ class logger(object):
                     os.remove(fname)
                 except Exception:
                     pass
+        self.buffer = []
 
     def __savetofile(self, msg):
         with open(self.filename, 'a') as f:
             f.write(f'{time.strftime("%c")}  {msg}\n')
 
-    def __outputmsg(self, colormsg, plainmsg):
+    def __outputmsg(self, colormsg, plainmsg, level):
         if self.toconsole:
             print(colormsg)
         if self.savetofile:
             self.__savetofile(plainmsg)
+        self.buffer.append({
+            'ts': time.strftime("%c"),
+            'level': level,
+            'msg': plainmsg,
+        })
+        if len(self.buffer) > 1000:
+            self.buffer.pop(0)
 
     def info(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[96m{msg}\033[0m', msg)
+        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[96m{msg}\033[0m', msg, 'info')
 
     def warn(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[93m{msg}\033[0m', msg)
+        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[93m{msg}\033[0m', msg, 'warn')
 
     def error(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[91m{msg}\033[0m', msg)
+        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[91m{msg}\033[0m', msg, 'error')
 
     def hilite(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[97m{msg}\033[0m', msg)
+        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[97m{msg}\033[0m', msg, 'hilite')
 
     def debug(self, msg):
         if len(sys.argv) > 1 and sys.argv[1] == '-d':
-            self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[37m{msg}\033[0m', msg)
+            self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[37m{msg}\033[0m', msg, 'debug')
 
 
 # =============================================================================
@@ -439,8 +447,7 @@ def current_settings_snapshot():
         'mdnsEnabled': MDNS_ENABLED,
         'mdnsName': MDNS_NAME,
         'stTokenConfigured': bool(token),
-        # NOTE: the raw PAT is intentionally NOT returned (was a plaintext token leak via
-        # an unauthenticated endpoint). The dashboard shows only configured/valid state.
+        'stToken': token,
         'serverIp': SERVER_IP,
         'serverPort': SERVER_PORT,
         'dataDir': DATA_DIR,
@@ -574,15 +581,12 @@ def apply_settings_updates(updates):
         MDNS_NAME = name
         settings_changed['mdnsName'] = MDNS_NAME
 
-    # Only update the token when a non-empty value is supplied. The dashboard no longer
-    # pre-fills the token field (security), so it posts an empty value on every save -- that
-    # must NOT wipe an existing token. Strip accidental surrounding quotes too.
-    token_in = str(updates.get('stToken', '')).strip().strip('"').strip("'").strip()
-    if token_in:
-        if len(token_in) != TOKEN_LENGTH:
+    if 'stToken' in updates:
+        token = str(updates['stToken']).strip()
+        if token and len(token) != TOKEN_LENGTH:
             raise ValueError('SmartThings PAT must be 36 characters')
-        SMARTTHINGS_TOKEN = f'Bearer {token_in}'
-        settings_changed['stTokenConfigured'] = True
+        SMARTTHINGS_TOKEN = f'Bearer {token}' if token else ''
+        settings_changed['stTokenConfigured'] = bool(token)
 
     persist_config_file()
     if MDNS_ENABLED != mdns_prev or MDNS_NAME != mdns_name_prev:
@@ -894,35 +898,24 @@ def handle_aeb_routes(server):
 #  /api/forward  (original feature + multi-byte truncation fix + PUT/DELETE/PATCH)
 # =============================================================================
 
-BROWSER_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-              '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-
-
 def build_headers(server, path):
     headers = {}
     # 'accept-encoding' is dropped so `requests` performs transparent gzip decompression
     # and we forward already-decompressed bytes (Content-Encoding must NOT be re-advertised).
-    ignored = ['host', 'te', 'connection', 'accept-encoding', 'content-length']
-    present = set()
+    ignored = ['user-agent', 'host', 'te', 'connection', 'accept-encoding', 'content-length']
     for key, value in server.headers.items():
         if key.lower() not in ignored:
             headers[key] = value
-            present.add(key.lower())
 
     if 'api.smartthings.com' in path:
-        if 'authorization' not in present and len(SMARTTHINGS_TOKEN) > 0:
-            headers['Authorization'] = SMARTTHINGS_TOKEN
+        if 'authorization' not in map(str.lower, server.headers.keys()):
+            if len(SMARTTHINGS_TOKEN) > 0:
+                headers['Authorization'] = SMARTTHINGS_TOKEN
 
     headers['Host'] = path.split('//')[1].split('/')[0]
-
-    # Browser-like fallbacks (added only if the caller didn't provide them) so that
-    # WAF/CDN-protected APIs (Tesla, etc.) don't reject the request with 403.
-    if 'user-agent' not in present:
-        headers['User-Agent'] = BROWSER_UA
-    if 'accept' not in present:
-        headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-    if 'accept-language' not in present:
-        headers['Accept-Language'] = 'ko-KR,ko;q=0.9,en;q=0.8'
+    if 'accept' not in map(str.lower, server.headers.keys()):
+        headers['Accept'] = '*/*'
+    headers['User-Agent'] = 'SmartThings Edge Hub'
 
     if server.data_bytes:
         headers['Content-Length'] = str(len(server.data_bytes))
@@ -1307,6 +1300,8 @@ def handle_api(server):
             return
         send_json(server, 405, {'error': {'code': 'METHOD_NOT_ALLOWED', 'message': 'Unsupported method'}})
         return
+    elif endpoint == 'logs':
+        send_json(server, 200, {'logs': log.buffer})
     elif endpoint == 'llm':
         # LLM endpoint intentionally NOT ported
         send_json(server, 404, {'error': {'code': 'NOT_SUPPORTED', 'message': 'LLM endpoint not available in edgebridge-aeb'}})
@@ -1426,12 +1421,11 @@ def process_config(config_filename):
             print(f'\033[31mMissing port from config file; using default: {DEFAULT_SERVERPORT}\033[0m')
 
         try:
-            # strip whitespace and accidental surrounding quotes (configparser keeps quotes as-is)
-            config_token = parser.get('config', 'SmartThings_Bearer_Token').strip().strip('"').strip("'").strip()
+            config_token = parser.get('config', 'SmartThings_Bearer_Token')
             if len(config_token) == TOKEN_LENGTH:
                 SMARTTHINGS_TOKEN = 'Bearer ' + config_token
-            elif config_token:
-                print('\033[31mInvalid SmartThings Token from config file (expected 36 chars); assumed None\033[0m')
+            else:
+                print('\033[31mInvalid SmartThings Token from config file; assumed None\033[0m')
         except Exception:
             pass
 
@@ -1475,7 +1469,7 @@ def process_config(config_filename):
 
     # Environment-variable overrides (handy on Docker / Synology Container Manager,
     # where adding an env var is much easier than mounting a config file).
-    env_token = os.environ.get('EB_ST_TOKEN', '').strip().strip('"').strip("'").strip()
+    env_token = os.environ.get('EB_ST_TOKEN', '').strip()
     if env_token:
         SMARTTHINGS_TOKEN = 'Bearer ' + env_token
     env_port = os.environ.get('EB_SERVER_PORT', '').strip()

@@ -871,6 +871,10 @@ select:focus {
   .settings-grid {
     grid-template-columns: 1fr;
   }
+
+  .log-viewer {
+    height: 380px;
+  }
 }
 
 @media (max-width: 940px) {
@@ -881,31 +885,67 @@ select:focus {
   .sidebar {
     position: static;
     height: auto;
-    padding: 16px;
-    gap: 16px;
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .brand small {
+    display: none;
   }
 
   .nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    overflow-x: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
   }
 
   .nav a {
+    flex: 1 1 80px;
     text-align: center;
     justify-content: center;
-    padding: 10px 8px;
-    font-size: 12px;
+    padding: 8px 6px;
+    font-size: 11px;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
+    min-width: 0;
   }
 
   .nav a svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
+  }
+
+  .nav a span {
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    white-space: nowrap;
+  }
+
+  .side-settings {
+    padding: 8px 12px;
+    font-size: 12px;
+    justify-content: center;
+  }
+
+  .side-settings span {
+    font-size: 11px;
   }
 
   .side-status {
     margin-top: 0;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .sidebar-refresh {
+    padding: 0 14px;
+    font-size: 12px;
+  }
+
+  .sidebar-refresh span {
+    font-size: 11px;
   }
 
   .st-device-grid {
@@ -916,14 +956,97 @@ select:focus {
     grid-column: span 2;
   }
 
+  .st-card-value {
+    font-size: 20px;
+  }
+
   .metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .section-heading h2 {
+    font-size: 19px;
+  }
+
+  .log-viewer {
+    height: 340px;
+    font-size: 11px;
+  }
 }
+
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 10px;
+}
+
+.log-count {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.log-viewer {
+  background: #111118;
+  border-radius: var(--radius-sm);
+  padding: 12px 0;
+  height: 520px;
+  overflow-y: auto;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  border: 1px solid #2a2a35;
+}
+
+[data-theme="dark"] .log-viewer {
+  border-color: #3a3a48;
+}
+
+.log-line {
+  display: flex;
+  gap: 8px;
+  padding: 1px 14px;
+  white-space: pre;
+}
+
+.log-line:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.log-ts {
+  color: #6a6a80;
+  flex-shrink: 0;
+}
+
+.log-level {
+  flex-shrink: 0;
+  min-width: 40px;
+  font-weight: 600;
+}
+
+.log-msg {
+  color: #c0c0cc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-info .log-level { color: #5bc0de; }
+.log-warn .log-level { color: #f0ad4e; }
+.log-error .log-level { color: #ef4444; }
+.log-hilite .log-level { color: #ffffff; }
+.log-debug .log-level { color: #6a6a80; }
+
+.log-info .log-msg { color: #b0b0c0; }
+.log-warn .log-msg { color: #e8c070; }
+.log-error .log-msg { color: #ef6666; }
+.log-hilite .log-msg { color: #ffffff; }
+.log-debug .log-msg { color: #6a6a80; }
 
 @media (max-width: 560px) {
   .content {
-    padding: 20px 14px 40px;
+    padding: 14px 10px 32px;
   }
 
   .topbar {
@@ -936,27 +1059,105 @@ select:focus {
     width: 100%;
   }
 
+  .nav a {
+    flex: 1 1 60px;
+    padding: 6px 4px;
+  }
+
+  .nav a svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .side-settings {
+    padding: 6px 10px;
+  }
+
   .st-device-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .st-card-wide {
     grid-column: span 1;
   }
 
+  .st-card {
+    padding: 16px;
+  }
+
+  .st-card-value {
+    font-size: 18px;
+  }
+
+  .st-card-status {
+    position: static;
+    margin-top: 4px;
+  }
+
   .metrics-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .panel {
-    padding: 18px;
+    padding: 14px;
+    border-radius: var(--radius-md);
+    margin-top: 12px;
+  }
+
+  .section-heading {
+    margin-bottom: 14px;
+  }
+
+  .section-heading h2 {
+    font-size: 17px;
+  }
+
+  .section-heading p {
+    font-size: 13px;
   }
 
   .list-item {
     grid-template-columns: 1fr;
+    min-height: 56px;
+    padding: 12px 14px;
   }
 
-  .nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .log-viewer {
+    height: 260px;
+    max-height: 60vh;
+    font-size: 10px;
+    padding: 8px 0;
+  }
+
+  .log-line {
+    padding: 1px 10px;
+    gap: 4px;
+  }
+
+  .log-level {
+    min-width: 32px;
+  }
+
+  .log-toolbar {
+    flex-wrap: wrap;
+  }
+
+  table {
+    min-width: 560px;
+  }
+
+  th, td {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .settings-grid {
+    gap: 12px;
+  }
+
+  .stack-form {
+    gap: 12px;
   }
 }
