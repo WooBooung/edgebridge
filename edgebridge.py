@@ -48,6 +48,7 @@ import ipaddress
 import uuid
 import base64
 import re
+from collections import OrderedDict
 from urllib.parse import unquote
 
 # ====== AEB MQTT BRIDGE dependencies ======
@@ -81,6 +82,7 @@ REGSFILENAME = '.registrations'
 REDIRECTSFILENAME = 'redirects.jsonl'
 CALLBACKSFILENAME = 'callbacks.jsonl'
 LOGFILE = 'edgebridge.log'
+DASHBOARD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dashboard')
 MAXPORT = 65535
 TOKEN_LENGTH = 36
 DEFAULT_SERVERPORT = 8088
@@ -102,6 +104,7 @@ MDNS_NAME = 'EdgeBridge-aeb'
 MDNS_TYPE = '_edgebridge._tcp.local.'
 _zeroconf = None
 _mdns_info = None
+SERVER_ADVERTISED_IP = ''
 
 # Server start time (for /api/ping)
 SERVER_STARTED_AT = int(time.time() * 1000)
@@ -188,6 +191,47 @@ def send_text(server, code, text):
 
 def send_raw(server, code, body_bytes, content_type):
     _send(server, code, body_bytes or b'', content_type or 'application/octet-stream')
+
+
+def serve_file(server, path, content_type):
+    try:
+        with open(path, 'rb') as f:
+            send_raw(server, 200, f.read(), content_type)
+    except FileNotFoundError:
+        send_text(server, 404, 'Not found')
+    except Exception as e:
+        log.error(f'Dashboard file error: {e}')
+        send_text(server, 500, 'Dashboard file error')
+
+
+def serve_dashboard(server, path_only):
+    if path_only in ('/dashboard', '/dashboard/'):
+        serve_file(server, os.path.join(DASHBOARD_DIR, 'index.html'), 'text/html; charset="utf-8"')
+        return True
+
+    prefix = '/dashboard/assets/'
+    if not path_only.startswith(prefix):
+        return False
+
+    rel_path = path_only[len(prefix):]
+    abs_path = os.path.normpath(os.path.join(DASHBOARD_DIR, 'assets', rel_path))
+    if not abs_path.startswith(os.path.normpath(os.path.join(DASHBOARD_DIR, 'assets'))):
+        send_text(server, 400, 'Invalid asset path')
+        return True
+    if not os.path.isfile(abs_path):
+        send_text(server, 404, 'Not found')
+        return True
+
+    content_types = {
+        '.css': 'text/css; charset="utf-8"',
+        '.js': 'application/javascript; charset="utf-8"',
+        '.json': 'application/json; charset="utf-8"',
+        '.svg': 'image/svg+xml',
+        '.png': 'image/png',
+    }
+    ext = os.path.splitext(rel_path)[1].lower()
+    serve_file(server, abs_path, content_types.get(ext, 'application/octet-stream'))
+    return True
 
 
 # =============================================================================
@@ -344,6 +388,204 @@ def build_ping():
         'mqtt': {'total': len(aeb_sessions), 'connected': connected, 'sessions': sessions},
         'blocked': {'hosts': 0, 'attempts': 0},
     }
+
+
+def build_dashboard_summary():
+    ping = build_ping()
+    registration_items = []
+    for item in registrations:
+        registration_items.append({
+            'devaddr': ':'.join(str(x) for x in item.get('devaddr', []) if x is not None),
+            'edgeid': item.get('edgeid'),
+            'hubaddr': ':'.join(str(x) for x in item.get('hubaddr', []) if x is not None),
+        })
+
+    mqtt_sessions = []
+    for session in aeb_sessions.values():
+        mqtt_sessions.append({
+            'id': session.get('id'),
+            'state': session.get('state', 'CREATED'),
+            'subscribedTopics': session.get('subscribedTopics', []),
+            'forwardTarget': session.get('forwardTarget'),
+            'pendingForwardCount': session.get('pendingForwardCount', 0),
+            'lastConnectedTs': session.get('lastConnectedTs'),
+            'lastForwardOkTs': session.get('lastForwardOkTs'),
+            'lastError': session.get('lastError'),
+            'effectiveClientId': session.get('effectiveClientId'),
+        })
+
+    return {
+        'bridge': ping,
+        'registrations': registration_items,
+        'redirects': list(redirects.values()),
+        'callbacks': list(callbacks.values()),
+        'mqttSessions': mqtt_sessions,
+        'server': {
+            'version': VERSION,
+            'dataDir': DATA_DIR,
+            'serverPort': SERVER_PORT,
+            'serverIp': SERVER_IP,
+            'mdnsEnabled': MDNS_ENABLED,
+            'mdnsName': MDNS_NAME,
+        },
+        'generatedAt': now_ms(),
+    }
+
+
+def current_settings_snapshot():
+    token = SMARTTHINGS_TOKEN[7:] if SMARTTHINGS_TOKEN.startswith('Bearer ') else SMARTTHINGS_TOKEN
+    return {
+        'forwardingTimeout': FWTIMEOUT,
+        'mdnsEnabled': MDNS_ENABLED,
+        'mdnsName': MDNS_NAME,
+        'stTokenConfigured': bool(token),
+        'stToken': token,
+        'serverIp': SERVER_IP,
+        'serverPort': SERVER_PORT,
+        'dataDir': DATA_DIR,
+        'source': {
+            'configFile': os.path.join(os.getcwd(), CONFIGFILENAME),
+            'envOverrides': {
+                'EB_ST_TOKEN': bool(os.environ.get('EB_ST_TOKEN', '').strip()),
+                'EB_FW_TIMEOUT': bool(os.environ.get('EB_FW_TIMEOUT', '').strip()),
+                'EB_MDNS_ENABLED': os.environ.get('EB_MDNS_ENABLED', '').strip().lower() in ('no', 'false', '0'),
+                'EB_MDNS_NAME': bool(os.environ.get('EB_MDNS_NAME', '').strip()),
+            },
+        },
+    }
+
+
+def read_existing_config_values():
+    values = {}
+    parser = configparser.ConfigParser()
+    path = os.path.join(os.getcwd(), CONFIGFILENAME)
+    if not parser.read(path):
+        return values
+    try:
+        values['Server_IP'] = parser.get('config', 'Server_IP', fallback='')
+        values['Server_Port'] = parser.get('config', 'Server_Port', fallback=str(DEFAULT_SERVERPORT))
+        values['SmartThings_Bearer_Token'] = parser.get('config', 'SmartThings_Bearer_Token', fallback='')
+        values['forwarding_timeout'] = parser.get('config', 'forwarding_timeout', fallback=str(FWTIMEOUT))
+        values['console_output'] = parser.get('config', 'console_output', fallback='yes')
+        values['logfile_output'] = parser.get('config', 'logfile_output', fallback='no')
+        values['logfile'] = parser.get('config', 'logfile', fallback=LOGFILE)
+        values['Data_Dir'] = parser.get('config', 'Data_Dir', fallback='')
+        values['mDNS_enabled'] = parser.get('config', 'mDNS_enabled', fallback='yes')
+        values['mDNS_name'] = parser.get('config', 'mDNS_name', fallback=MDNS_NAME)
+    except Exception:
+        pass
+    return values
+
+
+def persist_config_file():
+    path = os.path.join(os.getcwd(), CONFIGFILENAME)
+    token = SMARTTHINGS_TOKEN[7:] if SMARTTHINGS_TOKEN.startswith('Bearer ') else SMARTTHINGS_TOKEN
+    existing = read_existing_config_values()
+    desired = OrderedDict([
+        ('Server_IP', SERVER_IP or existing.get('Server_IP', '')),
+        ('Server_Port', str(SERVER_PORT or existing.get('Server_Port', DEFAULT_SERVERPORT))),
+        ('SmartThings_Bearer_Token', token),
+        ('forwarding_timeout', str(FWTIMEOUT)),
+        ('console_output', existing.get('console_output', 'yes')),
+        ('logfile_output', existing.get('logfile_output', 'no')),
+        ('logfile', existing.get('logfile', LOGFILE)),
+        ('Data_Dir', existing.get('Data_Dir', '')),
+        ('mDNS_enabled', 'yes' if MDNS_ENABLED else 'no'),
+        ('mDNS_name', MDNS_NAME),
+    ])
+    key_lookup = {key.lower(): key for key in desired}
+    lines = []
+    if os.path.exists(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                lines = f.read().splitlines()
+        except Exception as e:
+            raise RuntimeError(f'Unable to read config file: {e}')
+    if not lines:
+        lines = ['[config]']
+
+    out = []
+    in_config = False
+    seen = set()
+    for line in lines:
+        stripped = line.strip()
+        lowered = stripped.lower()
+        if lowered.startswith('[') and lowered.endswith(']'):
+            if in_config and seen != set(desired):
+                for key, value in desired.items():
+                    if key not in seen:
+                        out.append(f'{key} = {value}')
+                        seen.add(key)
+            in_config = lowered == '[config]'
+            out.append(line)
+            continue
+
+        if in_config and '=' in line and not stripped.startswith('#') and not stripped.startswith(';'):
+            key, _, _ = line.partition('=')
+            lookup = key.strip().lower()
+            if lookup in key_lookup:
+                canonical = key_lookup[lookup]
+                out.append(f'{canonical} = {desired[canonical]}')
+                seen.add(canonical)
+                continue
+        out.append(line)
+
+    if '[config]' not in [l.strip().lower() for l in lines]:
+        out = ['[config]'] + [f'{key} = {value}' for key, value in desired.items()]
+    else:
+        for key, value in desired.items():
+            if key not in seen:
+                out.append(f'{key} = {value}')
+
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(out) + '\n')
+    except Exception as e:
+        raise RuntimeError(f'Unable to write config file: {e}')
+
+
+def apply_settings_updates(updates):
+    global SMARTTHINGS_TOKEN, FWTIMEOUT, MDNS_ENABLED, MDNS_NAME
+
+    settings_changed = {}
+    mdns_prev = MDNS_ENABLED
+    mdns_name_prev = MDNS_NAME
+
+    if 'forwardingTimeout' in updates:
+        try:
+            fw = int(updates['forwardingTimeout'])
+            if fw < 1:
+                raise ValueError('forwardingTimeout must be >= 1')
+            FWTIMEOUT = fw
+            settings_changed['forwardingTimeout'] = FWTIMEOUT
+        except Exception:
+            raise ValueError('forwardingTimeout must be a positive integer')
+
+    if 'mdnsEnabled' in updates:
+        mdns_enabled = bool(updates['mdnsEnabled'])
+        MDNS_ENABLED = mdns_enabled
+        settings_changed['mdnsEnabled'] = MDNS_ENABLED
+
+    if 'mdnsName' in updates:
+        name = str(updates['mdnsName']).strip()
+        if not name:
+            raise ValueError('mDNS name cannot be empty')
+        MDNS_NAME = name
+        settings_changed['mdnsName'] = MDNS_NAME
+
+    if 'stToken' in updates:
+        token = str(updates['stToken']).strip()
+        if token and len(token) != TOKEN_LENGTH:
+            raise ValueError('SmartThings PAT must be 36 characters')
+        SMARTTHINGS_TOKEN = f'Bearer {token}' if token else ''
+        settings_changed['stTokenConfigured'] = bool(token)
+
+    persist_config_file()
+    if MDNS_ENABLED != mdns_prev or MDNS_NAME != mdns_name_prev:
+        stop_mdns()
+        if MDNS_ENABLED and SERVER_ADVERTISED_IP:
+            start_mdns(SERVER_ADVERTISED_IP, SERVER_PORT)
+    return settings_changed
 
 
 # =============================================================================
@@ -1038,6 +1280,29 @@ def handle_api(server):
         handle_callback(server, method, parts)
     elif endpoint == 'ping':
         send_json(server, 200, build_ping())
+    elif endpoint == 'dashboard':
+        send_json(server, 200, build_dashboard_summary())
+    elif endpoint == 'settings':
+        if method == 'GET':
+            send_json(server, 200, current_settings_snapshot())
+            return
+        if method in ('POST', 'PUT'):
+            req = aeb_get_json_body(server)
+            try:
+                changed = apply_settings_updates(req)
+                send_json(server, 200, {
+                    'ok': True,
+                    'settings': current_settings_snapshot(),
+                    'changed': changed,
+                })
+            except ValueError as e:
+                send_json(server, 400, {'error': {'code': 'BAD_SETTINGS', 'message': str(e)}})
+            except Exception as e:
+                log.error(f'Settings update failed: {e}')
+                send_json(server, 500, {'error': {'code': 'SETTINGS_UPDATE_FAILED', 'message': str(e)}})
+            return
+        send_json(server, 405, {'error': {'code': 'METHOD_NOT_ALLOWED', 'message': 'Unsupported method'}})
+        return
     elif endpoint == 'llm':
         # LLM endpoint intentionally NOT ported
         send_json(server, 404, {'error': {'code': 'NOT_SUPPORTED', 'message': 'LLM endpoint not available in edgebridge-aeb'}})
@@ -1056,6 +1321,10 @@ def proc_msg(server):
         server.data_bytes = server.rfile.read(int(server.headers['Content-Length']))
 
     path_only = server.path.split('?')[0]
+
+    # 0) Built-in web dashboard
+    if server.command == 'GET' and serve_dashboard(server, path_only):
+        return
 
     # 1) MQTT bridge traffic
     if path_only.startswith('/mqtt/'):
@@ -1259,6 +1528,7 @@ if __name__ == '__main__':
             s.close()
         else:
             myip = SERVER_IP
+        SERVER_ADVERTISED_IP = myip
 
         log.hilite(f'Forwarding Bridge Server v{VERSION} (for SmartThings Edge) [edgebridge-aeb]')
         log.hilite(f' > Serving HTTP on {myip}:{SERVER_PORT}')

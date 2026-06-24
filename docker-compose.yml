@@ -10,9 +10,12 @@
 
 services:
   edgebridge:
-    image: woobooung/edgebridge-aeb:latest
+    #image: woobooung/edgebridge-aeb:latest
+    build: .
     container_name: edgebridge-aeb
     network_mode: host
+    #ports:
+    #  - "8088:8088"
     # environment:
     #   - EB_ST_TOKEN=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx   # optional SmartThings PAT
     #   - EB_SERVER_PORT=8088                                # change if 8088 is taken
