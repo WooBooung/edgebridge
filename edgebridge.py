@@ -68,15 +68,17 @@ except Exception:
     HAVE_ZEROCONF = False
 # ====================================================
 
-# ====== optional: browser-impersonating HTTP client for /api/forward ======
-# curl_cffi mimics a real browser's TLS+HTTP/2 fingerprint, so WAF/CDN-protected
-# APIs (Tesla owner-api, Cloudflare/Akamai, etc.) don't reject forwards with 403.
+# ====== HTTP/2 + TLS 1.3 client for /api/forward ======
+# Mirrors AndroidEdgeBridge (OkHttp: HTTP/2 via ALPN, TLS 1.2/1.3 negotiated). Tesla's
+# owner-api 403s authenticated requests unless the connection is HTTP/2 + TLS 1.3
+# (see TeslaMate fixes #5390 / #5406, June 2026).
+import ssl
 try:
-    from curl_cffi import requests as cffi_requests
-    HAVE_CURL_CFFI = True
+    import httpx
+    HAVE_HTTPX = True
 except Exception:
-    HAVE_CURL_CFFI = False
-# ==========================================================================
+    HAVE_HTTPX = False
+# ======================================================
 
 registrations = []
 hubsenderrors = {}
@@ -956,6 +958,26 @@ def build_headers(server, path):
     return headers
 
 
+_fwd_clients = {}
+
+
+def _forward_client(url):
+    """HTTP/2 forward client. Force TLS 1.3 for Tesla (owner-api 403s authenticated
+    requests otherwise -- TeslaMate #5390/#5406); other hosts negotiate TLS normally so
+    TLS-1.2-only sites (e.g. some gov APIs) keep working."""
+    force_tls13 = ('teslamotors.com' in url) or ('.tesla.com' in url)
+    key = 'tls13' if force_tls13 else 'default'
+    client = _fwd_clients.get(key)
+    if client is None:
+        ctx = ssl.create_default_context()
+        if force_tls13:
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+        client = httpx.Client(http2=True, verify=ctx, timeout=FWTIMEOUT,
+                              follow_redirects=True, trust_env=False)
+        _fwd_clients[key] = client
+    return client
+
+
 def proc_forward(server, method, path, arg):
     if not arg.startswith('url='):
         log.error('Missing URL from forward command')
@@ -974,20 +996,13 @@ def proc_forward(server, method, path, arg):
         return
 
     try:
-        if HAVE_CURL_CFFI:
-            # Browser TLS/HTTP2 fingerprint (curl-impersonate) -- defeats Akamai/Cloudflare
-            # bot blocking (e.g. Tesla owner-api 403). Let impersonate set the matching browser
-            # UA/Accept; keep the caller's other headers (Authorization, Content-Type, ...).
-            fwd_headers = {k: v for k, v in headers.items()
-                           if k.lower() not in ('user-agent', 'accept', 'accept-language')}
-            r = cffi_requests.request(lc_method.upper(), url, data=server.data_bytes,
-                                      headers=fwd_headers, timeout=FWTIMEOUT, impersonate='chrome120')
+        if HAVE_HTTPX:
+            # HTTP/2 + (Tesla:) TLS 1.3, like AndroidEdgeBridge's OkHttp. httpx sets Host/
+            # Content-Length itself; pass our clean header set (Chrome UA, no sec-ch-ua).
+            send_headers = {k: v for k, v in headers.items() if k.lower() not in ('host', 'content-length')}
+            r = _forward_client(url).request(lc_method.upper(), url, headers=send_headers, content=server.data_bytes)
         else:
             r = getattr(requests, lc_method)(url, data=server.data_bytes, headers=headers, timeout=FWTIMEOUT)
-    except requests.Timeout:
-        log.error('Internet request timed out')
-        send_raw(server, 502, b'', None)
-        return
     except Exception as e:
         log.error(f'Forward error: {e}')
         send_raw(server, 502, f'Bad Gateway: {e}'.encode('utf-8'), 'text/plain; charset="utf-8"')
