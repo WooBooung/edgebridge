@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY edgebridge.py .
 COPY edgebridge.cfg .
+COPY dashboard ./dashboard
 
 # Persist registrations / redirects / callbacks / mqtt certs outside the container.
 ENV EB_DATA_DIR=/data

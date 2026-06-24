@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EdgeBridge Dashboard</title>
+  <link rel="stylesheet" href="/dashboard/assets/app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/dashboard" aria-label="EdgeBridge Dashboard">
+        <span class="brand-mark">EB</span>
+        <span>
+          <strong>EdgeBridge</strong>
+          <small>AEB Dashboard</small>
+        </span>
+      </a>
+      <nav class="nav" aria-label="Dashboard sections">
+        <a href="#overview">
+          <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span data-i18n="sidebar.overview">Overview</span>
+        </a>
+        <a href="#mqtt">
+          <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span data-i18n="sidebar.mqtt">MQTT</span>
+        </a>
+        <a href="#redirects">
+          <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+          <span data-i18n="sidebar.redirects">Redirects</span>
+        </a>
+        <a href="#callbacks">
+          <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          <span data-i18n="sidebar.callbacks">Callbacks</span>
+        </a>
+
+        <a href="#registrations">
+          <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span data-i18n="sidebar.devices">Devices</span>
+        </a>
+      </nav>
+      <div class="side-status">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text" data-i18n="status.connecting">Connecting</span>
+      </div>
+      <button class="icon-button primary sidebar-refresh" id="refresh-button" type="button" data-i18n-title="sidebar.refresh" title="Refresh">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.1 9A7 7 0 0 0 6.4 6.4L4 9"/><path d="M5.9 15a7 7 0 0 0 11.7 2.6L20 15"/></svg>
+        <span data-i18n="sidebar.refresh">Refresh</span>
+      </button>
+      <a class="side-settings" href="#settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a7.8 7.8 0 0 0 .1-6l2-1.2-2-3.4-2.3 1a8 8 0 0 0-5.2-3L11.5 0h-4l-.4 2.4a8 8 0 0 0-5.2 3l-2.3-1-2 3.4 2 1.2a7.8 7.8 0 0 0 0 6l-2 1.2 2 3.4 2.3-1a8 8 0 0 0 5.2 3L7.5 24h4l.4-2.4a8 8 0 0 0 5.2-3l2.3 1 2-3.4z"/></svg>
+        <span data-i18n="sidebar.settings">Settings</span>
+      </a>
+    </aside>
+
+    <main class="content">
+      <div class="page" data-page="overview">
+
+
+        <div class="st-device-grid">
+          <article class="st-card st-card-accent">
+            <div class="st-card-icon st-icon-server">
+              <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            </div>
+            <div class="st-card-body">
+              <span class="st-card-name" data-i18n="overview.server">Server</span>
+              <strong class="st-card-value" id="server-version">v2.0</strong>
+              <span class="st-card-detail"><span data-i18n="overview.port">Port</span> <span id="server-port">8088</span></span>
+            </div>
+            <div class="st-card-status">
+              <span class="st-badge st-badge-online" data-i18n="overview.online">Online</span>
+            </div>
+          </article>
+
+          <article class="st-card">
+            <div class="st-card-icon st-icon-pat">
+              <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div class="st-card-body">
+              <span class="st-card-name" data-i18n="overview.pat">SmartThings PAT</span>
+              <strong class="st-card-value" id="pat-state">-</strong>
+            </div>
+            <div class="st-card-status">
+              <span class="st-indicator" id="pat-indicator"></span>
+            </div>
+          </article>
+
+          <article class="st-card">
+            <div class="st-card-icon st-icon-mqtt">
+              <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            </div>
+            <div class="st-card-body">
+              <span class="st-card-name" data-i18n="overview.mqttSessions">MQTT Sessions</span>
+              <strong class="st-card-value" id="mqtt-count">-</strong>
+              <span class="st-card-detail"><span id="mqtt-connected">0</span> <span data-i18n="overview.connected">connected</span></span>
+            </div>
+          </article>
+
+          <article class="st-card">
+            <div class="st-card-icon st-icon-redirect">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+            </div>
+            <div class="st-card-body">
+              <span class="st-card-name" data-i18n="overview.redirects">Redirects</span>
+              <strong class="st-card-value" id="redirect-count">-</strong>
+            </div>
+          </article>
+
+          <article class="st-card">
+            <div class="st-card-icon st-icon-callback">
+              <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </div>
+            <div class="st-card-body">
+              <span class="st-card-name" data-i18n="overview.callbacks">Callbacks</span>
+              <strong class="st-card-value" id="callback-count">-</strong>
+            </div>
+          </article>
+
+          <article class="st-card">
+            <div class="st-card-icon st-icon-device">
+              <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <div class="st-card-body">
+              <span class="st-card-name" data-i18n="overview.registered">Registered Devices</span>
+              <strong class="st-card-value" id="registration-count">0</strong>
+            </div>
+          </article>
+
+          <article class="st-card">
+            <div class="st-card-icon st-icon-mdns">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </div>
+            <div class="st-card-body">
+              <span class="st-card-name" data-i18n="overview.mdns">mDNS</span>
+              <strong class="st-card-value" id="mdns-state">-</strong>
+            </div>
+            <div class="st-card-status">
+              <span class="st-indicator" id="mdns-indicator"></span>
+            </div>
+          </article>
+
+          <article class="st-card st-card-wide">
+            <div class="st-card-icon st-icon-folder">
+              <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <div class="st-card-body">
+              <span class="st-card-name" data-i18n="overview.dataDir">Data Directory</span>
+              <strong class="st-card-value truncate" id="data-dir">-</strong>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="page" data-page="settings">
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <h2 data-i18n="settings.title">Runtime Settings</h2>
+              <p data-i18n="settings.desc">Change bridge settings live from the web.</p>
+            </div>
+          </div>
+          <form class="settings-grid" id="settings-form">
+            <label>
+              <span data-i18n="settings.pat">SmartThings PAT</span>
+              <input name="stToken" id="setting-token" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+            </label>
+            <label>
+              <span data-i18n="settings.forwardTimeout">Forward timeout (sec)</span>
+              <input name="forwardingTimeout" id="setting-fw" type="number" min="1" step="1">
+            </label>
+            <label>
+              <span data-i18n="settings.mdnsName">mDNS name</span>
+              <input name="mdnsName" id="setting-mdns-name" autocomplete="off">
+            </label>
+            <label class="switch-field">
+              <span data-i18n="settings.mdnsEnabled">mDNS enabled</span>
+              <button class="switch" id="setting-mdns-enabled" type="button" role="switch" aria-checked="true">
+                <span class="switch-knob"></span>
+              </button>
+            </label>
+            <label>
+              <span data-i18n="settings.language">Language</span>
+              <select id="setting-lang">
+                <option value="en">English</option>
+                <option value="ko">한국어</option>
+              </select>
+            </label>
+            <label class="switch-field">
+              <span data-i18n="settings.darkTheme">Dark theme</span>
+              <button class="switch" id="setting-theme" type="button" role="switch" aria-checked="false">
+                <span class="switch-knob"></span>
+              </button>
+            </label>
+            <div class="settings-actions">
+              <button class="btn btn-primary" type="submit" data-i18n-title="settings.save" title="Save settings">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+                <span data-i18n="settings.save">Save settings</span>
+              </button>
+              <span class="settings-note" id="settings-note">-</span>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <div class="page" data-page="mqtt">
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <h2 data-i18n="mqtt.title">MQTT Sessions</h2>
+              <p data-i18n="mqtt.desc">AEB MQTT sessions and forwarding status currently in memory.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th data-i18n="mqtt.session">Session</th>
+                  <th data-i18n="mqtt.state">State</th>
+                  <th data-i18n="mqtt.topics">Topics</th>
+                  <th data-i18n="mqtt.forwardTarget">Forward target</th>
+                  <th data-i18n="mqtt.error">Error</th>
+                </tr>
+              </thead>
+              <tbody id="mqtt-table"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div class="page" data-page="redirects">
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <h2 data-i18n="redirects.title">Redirects</h2>
+              <p data-i18n="redirects.desc">Map paths to external URLs.</p>
+            </div>
+          </div>
+          <form class="stack-form" id="redirect-form">
+            <label>
+              <span data-i18n="redirects.path">Path</span>
+              <input name="path" placeholder="/weather" required>
+            </label>
+            <label>
+              <span data-i18n="redirects.targetUrl">Target URL</span>
+              <input name="target" type="url" placeholder="https://example.com/api" required>
+            </label>
+            <button class="icon-button primary" type="submit" data-i18n-title="redirects.add" title="Add redirect">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              <span data-i18n="redirects.add">Add redirect</span>
+            </button>
+          </form>
+          <div class="item-list" id="redirect-list"></div>
+        </section>
+      </div>
+
+      <div class="page" data-page="callbacks">
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <h2 data-i18n="callbacks.title">Callbacks</h2>
+              <p data-i18n="callbacks.desc">View and update arbitrary values stored by name key.</p>
+            </div>
+          </div>
+          <form class="stack-form" id="callback-form">
+            <label>
+              <span data-i18n="callbacks.name">Name</span>
+              <input name="name" pattern="[A-Za-z0-9_-]+" placeholder="sensor_state" required>
+            </label>
+            <label>
+              <span data-i18n="callbacks.value">Value</span>
+              <textarea name="value" rows="4" placeholder='{"state":"on"}'></textarea>
+            </label>
+            <button class="icon-button primary" type="submit" data-i18n-title="callbacks.save" title="Save callback">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+              <span data-i18n="callbacks.save">Save callback</span>
+            </button>
+          </form>
+          <div class="item-list" id="callback-list"></div>
+        </section>
+      </div>
+
+      <div class="page" data-page="registrations">
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <h2 data-i18n="registrations.title">Registered Devices</h2>
+              <p data-i18n="registrations.desc">Registration info forwarded from IoT devices to the SmartThings Hub.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th data-i18n="registrations.deviceAddr">Device address</th>
+                  <th data-i18n="registrations.hubAddr">Hub address</th>
+                  <th data-i18n="registrations.edgeId">Edge ID</th>
+                </tr>
+              </thead>
+              <tbody id="registration-table"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/dashboard/assets/app.js"></script>
+</body>
+</html>
