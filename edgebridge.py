@@ -439,7 +439,8 @@ def current_settings_snapshot():
         'mdnsEnabled': MDNS_ENABLED,
         'mdnsName': MDNS_NAME,
         'stTokenConfigured': bool(token),
-        'stToken': token,
+        # NOTE: the raw PAT is intentionally NOT returned (was a plaintext token leak via
+        # an unauthenticated endpoint). The dashboard shows only configured/valid state.
         'serverIp': SERVER_IP,
         'serverPort': SERVER_PORT,
         'dataDir': DATA_DIR,
@@ -573,12 +574,15 @@ def apply_settings_updates(updates):
         MDNS_NAME = name
         settings_changed['mdnsName'] = MDNS_NAME
 
-    if 'stToken' in updates:
-        token = str(updates['stToken']).strip()
-        if token and len(token) != TOKEN_LENGTH:
+    # Only update the token when a non-empty value is supplied. The dashboard no longer
+    # pre-fills the token field (security), so it posts an empty value on every save -- that
+    # must NOT wipe an existing token. Strip accidental surrounding quotes too.
+    token_in = str(updates.get('stToken', '')).strip().strip('"').strip("'").strip()
+    if token_in:
+        if len(token_in) != TOKEN_LENGTH:
             raise ValueError('SmartThings PAT must be 36 characters')
-        SMARTTHINGS_TOKEN = f'Bearer {token}' if token else ''
-        settings_changed['stTokenConfigured'] = bool(token)
+        SMARTTHINGS_TOKEN = f'Bearer {token_in}'
+        settings_changed['stTokenConfigured'] = True
 
     persist_config_file()
     if MDNS_ENABLED != mdns_prev or MDNS_NAME != mdns_name_prev:
