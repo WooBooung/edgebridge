@@ -24,6 +24,12 @@ COPY edgebridge.py .
 COPY edgebridge.cfg .
 COPY dashboard ./dashboard
 
+# Build identity (passed by CI) -- surfaced in /api/ping so builds are distinguishable.
+ARG BUILD_SHA=dev
+ARG BUILD_DATE=
+ENV EB_BUILD_SHA=$BUILD_SHA \
+    EB_BUILD_DATE=$BUILD_DATE
+
 # Persist registrations / redirects / callbacks / mqtt certs outside the container.
 ENV EB_DATA_DIR=/data
 VOLUME ["/data"]

@@ -32,7 +32,7 @@
 # Reads 'edgebridge.cfg' for configuration (server port/ip, SmartThings token, data dir).
 # Persists '.registrations', 'redirects.jsonl', 'callbacks.jsonl' under the data directory.
 #
-VERSION = '1.0.0_AEB'
+VERSION = '1.0.1_AEB'
 
 import http.server
 import datetime
@@ -119,6 +119,13 @@ SERVER_ADVERTISED_IP = ''
 # Server start time (for /api/ping)
 SERVER_STARTED_AT = int(time.time() * 1000)
 SERVER_START_STR = time.strftime('%m/%d %H:%M')
+
+# Build identity (injected by CI at image build time) -- lets you tell builds apart
+# even when VERSION is unchanged. 'dev' when run from source.
+BUILD_SHA = os.environ.get('EB_BUILD_SHA', 'dev')[:7]
+BUILD_DATE = os.environ.get('EB_BUILD_DATE', '')
+# Displayed version changes every build (VERSION + git short SHA) so a fresh image is obvious.
+DISPLAY_VERSION = VERSION if BUILD_SHA == 'dev' else f'{VERSION}+{BUILD_SHA}'
 
 
 class logger(object):
@@ -387,7 +394,9 @@ def build_ping():
     return {
         'battery': 100,                 # always powered (not an Android device)
         'bridgeDevice': 'server',
-        'bridgeVersion': VERSION,
+        'bridgeVersion': DISPLAY_VERSION,   # VERSION + git short SHA -> changes every build
+        'build': BUILD_SHA,
+        'buildDate': BUILD_DATE,
         'serverStartTime': SERVER_START_STR,
         'supportedAiOptions': [],       # LLM not ported
         'stOauthConnected': pat_ok,     # true when the configured PAT is valid
@@ -1553,7 +1562,7 @@ if __name__ == '__main__':
             myip = SERVER_IP
         SERVER_ADVERTISED_IP = myip
 
-        log.hilite(f'Forwarding Bridge Server v{VERSION} (for SmartThings Edge) [edgebridge-aeb]')
+        log.hilite(f'Forwarding Bridge Server v{DISPLAY_VERSION} ({BUILD_DATE}) [edgebridge-aeb]')
         log.hilite(f' > Serving HTTP on {myip}:{SERVER_PORT}')
         log.hilite(f' > Data directory: {DATA_DIR}')
         log.hilite(f' > Loaded {len(redirects)} redirect(s), {len(callbacks)} callback(s)')
