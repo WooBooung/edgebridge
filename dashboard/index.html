@@ -38,6 +38,10 @@
           <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
           <span data-i18n="sidebar.devices">Devices</span>
         </a>
+        <a href="#logs">
+          <svg viewBox="0 0 24 24"><path d="M20 12H4"/><path d="M20 18H4"/><path d="M20 6H4"/></svg>
+          <span data-i18n="sidebar.logs">Logs</span>
+        </a>
       </nav>
       <div class="side-status">
         <span class="status-dot" id="status-dot"></span>
@@ -299,6 +303,25 @@
               <tbody id="registration-table"></tbody>
             </table>
           </div>
+        </section>
+      </div>
+
+      <div class="page" data-page="logs">
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <h2 data-i18n="logs.title">Server Logs</h2>
+              <p data-i18n="logs.desc">Real-time server log output.</p>
+            </div>
+          </div>
+          <div class="log-toolbar">
+            <span class="log-count" id="log-count">0</span>
+            <button class="icon-button" type="button" id="log-clear" title="Clear">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
+              <span data-i18n="logs.clear">Clear</span>
+            </button>
+          </div>
+          <div class="log-viewer" id="log-viewer"></div>
         </section>
       </div>
     </main>

@@ -143,32 +143,40 @@ class logger(object):
                     os.remove(fname)
                 except Exception:
                     pass
+        self.buffer = []   # in-memory ring of recent log lines (for /api/logs dashboard)
 
     def __savetofile(self, msg):
         with open(self.filename, 'a') as f:
             f.write(f'{time.strftime("%c")}  {msg}\n')
 
-    def __outputmsg(self, colormsg, plainmsg):
+    def __outputmsg(self, colormsg, plainmsg, level):
         if self.toconsole:
             print(colormsg)
         if self.savetofile:
             self.__savetofile(plainmsg)
+        self.buffer.append({
+            'ts': time.strftime("%c"),
+            'level': level,
+            'msg': plainmsg,
+        })
+        if len(self.buffer) > 1000:
+            self.buffer.pop(0)
 
     def info(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[96m{msg}\033[0m', msg)
+        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[96m{msg}\033[0m', msg, 'info')
 
     def warn(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[93m{msg}\033[0m', msg)
+        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[93m{msg}\033[0m', msg, 'warn')
 
     def error(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[91m{msg}\033[0m', msg)
+        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[91m{msg}\033[0m', msg, 'error')
 
     def hilite(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[97m{msg}\033[0m', msg)
+        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[97m{msg}\033[0m', msg, 'hilite')
 
     def debug(self, msg):
         if len(sys.argv) > 1 and sys.argv[1] == '-d':
-            self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[37m{msg}\033[0m', msg)
+            self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[37m{msg}\033[0m', msg, 'debug')
 
 
 # =============================================================================
@@ -1314,6 +1322,8 @@ def handle_api(server):
         send_json(server, 200, build_ping())
     elif endpoint == 'dashboard':
         send_json(server, 200, build_dashboard_summary())
+    elif endpoint == 'logs':
+        send_json(server, 200, {'logs': log.buffer})
     elif endpoint == 'settings':
         if method == 'GET':
             send_json(server, 200, current_settings_snapshot())
