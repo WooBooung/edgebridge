@@ -68,6 +68,16 @@ except Exception:
     HAVE_ZEROCONF = False
 # ====================================================
 
+# ====== optional: browser-impersonating HTTP client for /api/forward ======
+# curl_cffi mimics a real browser's TLS+HTTP/2 fingerprint, so WAF/CDN-protected
+# APIs (Tesla owner-api, Cloudflare/Akamai, etc.) don't reject forwards with 403.
+try:
+    from curl_cffi import requests as cffi_requests
+    HAVE_CURL_CFFI = True
+except Exception:
+    HAVE_CURL_CFFI = False
+# ==========================================================================
+
 registrations = []
 hubsenderrors = {}
 regdeletelist = []
@@ -947,7 +957,16 @@ def proc_forward(server, method, path, arg):
         return
 
     try:
-        r = getattr(requests, lc_method)(url, data=server.data_bytes, headers=headers, timeout=FWTIMEOUT)
+        if HAVE_CURL_CFFI:
+            # Browser TLS/HTTP2 fingerprint (curl-impersonate) -- defeats Akamai/Cloudflare
+            # bot blocking (e.g. Tesla owner-api 403). Let impersonate set the matching browser
+            # UA/Accept; keep the caller's other headers (Authorization, Content-Type, ...).
+            fwd_headers = {k: v for k, v in headers.items()
+                           if k.lower() not in ('user-agent', 'accept', 'accept-language')}
+            r = cffi_requests.request(lc_method.upper(), url, data=server.data_bytes,
+                                      headers=fwd_headers, timeout=FWTIMEOUT, impersonate='chrome120')
+        else:
+            r = getattr(requests, lc_method)(url, data=server.data_bytes, headers=headers, timeout=FWTIMEOUT)
     except requests.Timeout:
         log.error('Internet request timed out')
         send_raw(server, 502, b'', None)
