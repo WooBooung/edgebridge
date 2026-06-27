@@ -85,6 +85,20 @@ function formatDate(ms) {
   }
 }
 
+function formatLogTs(ms) {
+  if (!ms) return '-';
+  try {
+    const locale = lang.current === 'ko' ? 'ko-KR' : 'en-US';
+    return new Intl.DateTimeFormat(locale, {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    }).format(new Date(ms));
+  } catch {
+    return String(ms);
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -225,7 +239,7 @@ async function loadLogs() {
       const e = logs[i];
       const div = document.createElement('div');
       div.className = `log-line ${levelClass(e.level)}`;
-      div.innerHTML = `<span class="log-ts">${escapeHtml(e.ts)}</span> <span class="log-level">${escapeHtml(e.level)}</span> <span class="log-msg">${escapeHtml(e.msg)}</span>`;
+      div.innerHTML = `<span class="log-ts">${escapeHtml(formatLogTs(e.ts))}</span> <span class="log-level">${escapeHtml(e.level)}</span> <span class="log-msg">${escapeHtml(e.msg)}</span>`;
       fragment.appendChild(div);
     }
     if (firstNew === 0) {
