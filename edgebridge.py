@@ -157,7 +157,7 @@ class logger(object):
         if self.savetofile:
             self.__savetofile(plainmsg)
         self.buffer.append({
-            'ts': time.strftime("%c"),
+            'ts': int(time.time() * 1000),
             'level': level,
             'msg': plainmsg,
         })
