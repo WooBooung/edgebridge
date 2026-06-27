@@ -48,6 +48,7 @@ import ipaddress
 import uuid
 import base64
 import re
+import zoneinfo
 from collections import OrderedDict
 from urllib.parse import unquote
 
@@ -106,6 +107,8 @@ FWTIMEOUT = 5
 
 DATA_DIR = os.environ.get('EB_DATA_DIR', os.getcwd())
 
+TIMEZONE = 'UTC'
+
 CALLBACK_NAME_REGEX = re.compile(r'^[A-Za-z0-9_\-]+$')
 CALLBACK_MAX_VALUE_BYTES = 64 * 1024
 MQTT_RING_MAX = 200
@@ -147,9 +150,16 @@ class logger(object):
                     pass
         self.buffer = []   # in-memory ring of recent log lines (for /api/logs dashboard)
 
+    def _ts(self):
+        try:
+            tz = zoneinfo.ZoneInfo(TIMEZONE)
+            return datetime.datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+        except Exception:
+            return time.strftime("%Y-%m-%d %H:%M:%S %Z")
+
     def __savetofile(self, msg):
         with open(self.filename, 'a') as f:
-            f.write(f'{time.strftime("%c")}  {msg}\n')
+            f.write(f'{self._ts()}  {msg}\n')
 
     def __outputmsg(self, colormsg, plainmsg, level):
         if self.toconsole:
@@ -165,20 +175,20 @@ class logger(object):
             self.buffer.pop(0)
 
     def info(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[96m{msg}\033[0m', msg, 'info')
+        self.__outputmsg(f'\033[33m{self._ts()}  \033[96m{msg}\033[0m', msg, 'info')
 
     def warn(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[93m{msg}\033[0m', msg, 'warn')
+        self.__outputmsg(f'\033[33m{self._ts()}  \033[93m{msg}\033[0m', msg, 'warn')
 
     def error(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[91m{msg}\033[0m', msg, 'error')
+        self.__outputmsg(f'\033[33m{self._ts()}  \033[91m{msg}\033[0m', msg, 'error')
 
     def hilite(self, msg):
-        self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[97m{msg}\033[0m', msg, 'hilite')
+        self.__outputmsg(f'\033[33m{self._ts()}  \033[97m{msg}\033[0m', msg, 'hilite')
 
     def debug(self, msg):
         if len(sys.argv) > 1 and sys.argv[1] == '-d':
-            self.__outputmsg(f'\033[33m{time.strftime("%c")}  \033[37m{msg}\033[0m', msg, 'debug')
+            self.__outputmsg(f'\033[33m{self._ts()}  \033[37m{msg}\033[0m', msg, 'debug')
 
 
 # =============================================================================
@@ -472,6 +482,7 @@ def current_settings_snapshot():
         # an unauthenticated endpoint). The dashboard shows only configured/valid state.
         'serverIp': SERVER_IP,
         'serverPort': SERVER_PORT,
+        'timezone': TIMEZONE,
         'dataDir': DATA_DIR,
         'source': {
             'configFile': os.path.join(os.getcwd(), CONFIGFILENAME),
@@ -480,6 +491,7 @@ def current_settings_snapshot():
                 'EB_FW_TIMEOUT': bool(os.environ.get('EB_FW_TIMEOUT', '').strip()),
                 'EB_MDNS_ENABLED': os.environ.get('EB_MDNS_ENABLED', '').strip().lower() in ('no', 'false', '0'),
                 'EB_MDNS_NAME': bool(os.environ.get('EB_MDNS_NAME', '').strip()),
+                'EB_TZ': bool(os.environ.get('EB_TZ', '').strip()),
             },
         },
     }
@@ -502,6 +514,7 @@ def read_existing_config_values():
         values['Data_Dir'] = parser.get('config', 'Data_Dir', fallback='')
         values['mDNS_enabled'] = parser.get('config', 'mDNS_enabled', fallback='yes')
         values['mDNS_name'] = parser.get('config', 'mDNS_name', fallback=MDNS_NAME)
+        values['Timezone'] = parser.get('config', 'Timezone', fallback='UTC')
     except Exception:
         pass
     return values
@@ -522,6 +535,7 @@ def persist_config_file():
         ('Data_Dir', existing.get('Data_Dir', '')),
         ('mDNS_enabled', 'yes' if MDNS_ENABLED else 'no'),
         ('mDNS_name', MDNS_NAME),
+        ('Timezone', TIMEZONE),
     ])
     key_lookup = {key.lower(): key for key in desired}
     lines = []
@@ -1548,6 +1562,15 @@ def process_config(config_filename):
             FWTIMEOUT = int(env_fw)
         except ValueError:
             pass
+    try:
+        config_tz = parser.get('config', 'Timezone').strip()
+        if config_tz:
+            TIMEZONE = config_tz
+    except Exception:
+        pass
+    env_tz = os.environ.get('EB_TZ', '').strip()
+    if env_tz:
+        TIMEZONE = env_tz
     if os.environ.get('EB_MDNS_ENABLED', '').strip().lower() in ('no', 'false', '0'):
         MDNS_ENABLED = False
     env_mdns_name = os.environ.get('EB_MDNS_NAME', '').strip()
